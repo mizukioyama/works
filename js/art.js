@@ -42,30 +42,31 @@ const sunMaterial = new THREE.ShaderMaterial({
     }
   `,
   fragmentShader: `
-    uniform float time;
-    uniform vec3 color;
-    uniform vec3 emissiveColor;
-    varying vec2 vUv;
+uniform float time;
+uniform vec3 color;
+uniform vec3 emissiveColor;
+varying vec2 vUv;
 
-    void main() {
-      float d = distance(vUv, vec2(0.5));
-      if (d > 0.5) discard;
+void main() {
+  float d = distance(vUv, vec2(0.5));
+  if (d > 0.5) discard;
 
-      // Phase moves from 0 (new moon) to 1 (full moon)
-      float phase = 0.5 + 0.5 * sin(time * 0.2);
+  // Phase shift: moves -1 to +1 (full cycle)
+  float phase = sin(time * 0.2);
 
-      // simulate crescent / half / gibbous
-      float offset = (phase - 0.5) * 1.5;
-      float cut = smoothstep(0.48 + offset, 0.52 + offset, vUv.x);
+  // Horizontal cutoff for moon phase
+  float cutoff = smoothstep(0.5 + phase * 0.3 - 0.02, 0.5 + phase * 0.3 + 0.02, vUv.x);
 
-      float visibility = cut * (1.0 - d * 2.0);
-      visibility = clamp(visibility, 0.0, 1.0);
+  // Fade with distance from center
+  float fade = 1.0 - smoothstep(0.4, 0.5, d);
 
-      // Soft edge
-      visibility = smoothstep(0.0, 0.8, visibility);
+  float visibility = cutoff * fade;
 
-      gl_FragColor = vec4(mix(color, emissiveColor, visibility), visibility);
-    }
+  // Smooth edge
+  visibility = smoothstep(0.0, 1.0, visibility);
+
+  gl_FragColor = vec4(mix(color, emissiveColor, visibility), visibility);
+}
   `,
 });
 
