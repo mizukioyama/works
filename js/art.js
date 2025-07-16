@@ -26,6 +26,8 @@ scene.add(pointLight);
 // === Sun ShaderMaterial (simulating moon phases) ===
 const sunUniforms = {
   time: { value: 0.0 },
+  speed: { value: 0.07 },          // <-- 進行速度を調整
+  edgeSoftness: { value: 0.06 },   // <-- 境界の柔らかさを調整
   color: { value: new THREE.Color(0xffcc00) },
   emissiveColor: { value: new THREE.Color(0xffaa00) },
 };
@@ -43,6 +45,8 @@ const sunMaterial = new THREE.ShaderMaterial({
   `,
   fragmentShader: `
 uniform float time;
+uniform float speed;
+uniform float edgeSoftness;
 uniform vec3 color;
 uniform vec3 emissiveColor;
 varying vec2 vUv;
@@ -51,18 +55,17 @@ void main() {
   float d = distance(vUv, vec2(0.5));
   if (d > 0.5) discard;
 
-  // Phase shift: moves -1 to +1 (full cycle)
-  float phase = sin(time * 0.2);
+  // Phase curve with power for longer crescents
+  float rawPhase = sin(time * speed);
+  float phase = sign(rawPhase) * pow(abs(rawPhase), 0.6);
 
-  // Horizontal cutoff for moon phase
-  float cutoff = smoothstep(0.5 + phase * 0.3 - 0.02, 0.5 + phase * 0.3 + 0.02, vUv.x);
+  // Horizontal cutoff moves with phase
+  float cutoff = smoothstep(0.5 + phase * 0.3 - edgeSoftness, 0.5 + phase * 0.3 + edgeSoftness, vUv.x);
 
   // Fade with distance from center
   float fade = 1.0 - smoothstep(0.4, 0.5, d);
 
   float visibility = cutoff * fade;
-
-  // Smooth edge
   visibility = smoothstep(0.0, 1.0, visibility);
 
   gl_FragColor = vec4(mix(color, emissiveColor, visibility), visibility);
