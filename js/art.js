@@ -10,7 +10,7 @@ scene.background = new THREE.Color(0x000000);
 
 // Camera
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 0, 10);
+camera.position.set(0, 0, 12);
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
@@ -26,7 +26,7 @@ const pointLight = new THREE.PointLight(0xffffff, 2, 100);
 pointLight.position.set(5, 5, 5);
 scene.add(pointLight);
 
-// === Custom shader for the Sun (morphing new moon to full moon) ===
+// === Sun Shader ===
 const sunUniforms = {
   time: { value: 0.0 },
   color: { value: new THREE.Color(0xffcc00) },
@@ -54,34 +54,32 @@ const sunMaterial = new THREE.ShaderMaterial({
       float d = distance(vUv, vec2(0.5));
       if (d > 0.5) discard;
 
-      // Eclipse phase oscillates from 0.0 (full) to 1.0 (new moon)
-      float phase = 0.5 + 0.5 * sin(time * 0.5);
-      float cutX = 0.5 + (phase - 0.5) * 0.5;
+      // -1 (new moon) to +1 (full moon)
+      float phase = sin(time * 0.2);
+      float cutoff = 0.5 + 0.5 * phase;
+      float edge = smoothstep(cutoff - 0.02, cutoff + 0.02, vUv.x) * (1.0 - smoothstep(1.0 - cutoff - 0.02, 1.0 - cutoff + 0.02, vUv.x));
 
-      // Mask to simulate moon phase
-      float mask = smoothstep(cutX - 0.02, cutX + 0.02, vUv.x) * (1.0 - smoothstep(1.0 - cutX - 0.02, 1.0 - cutX + 0.02, vUv.x));
-
-      vec3 finalColor = mix(color, emissiveColor, 0.5 + 0.5 * mask);
+      float brightness = mix(0.1, 1.0, edge);
+      vec3 finalColor = mix(color * 0.2, emissiveColor, brightness);
       gl_FragColor = vec4(finalColor, 1.0);
     }
   `,
 });
 
-const sunGeo = new THREE.SphereGeometry(1, 128, 128);
+const sunGeo = new THREE.SphereGeometry(1.5, 128, 128);
 const sun = new THREE.Mesh(sunGeo, sunMaterial);
 scene.add(sun);
 
-// === Wavy Rings ===
-const ringCount = 1000;
+// === Rings ===
+const ringCount = 150;
 const ringSegments = 128;
 const rings = [];
+
 for (let j = 0; j < ringCount; j++) {
-  const radius = 1.5 + Math.random() * 3;
+  const radius = 2.5 + Math.random() * 4;
   const amplitude = 0.02 + Math.random() * 0.1;
   const frequency = 2 + Math.random() * 5;
   const phase = Math.random() * Math.PI * 2;
-  const hue = 40 + Math.random() * 40;
-  const color = new THREE.Color(`hsl(${hue}, 100%, 60%)`);
 
   const ringGeometry = new THREE.BufferGeometry();
   const positions = new Float32Array(ringSegments * 3);
@@ -92,6 +90,12 @@ for (let j = 0; j < ringCount; j++) {
     positions[i * 3 + 2] = 0;
   }
   ringGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+  // HSL color gradient based on angle
+  const hue = 40 + Math.random() * 40;
+  const sat = 80 + Math.random() * 20;
+  const light = 50 + Math.random() * 10;
+  const color = new THREE.Color(`hsl(${hue}, ${sat}%, ${light}%)`);
 
   const ringMaterial = new THREE.LineBasicMaterial({
     color,
@@ -105,13 +109,10 @@ for (let j = 0; j < ringCount; j++) {
   rings.push(ring);
 }
 
-// === Bloom ===
+// === Postprocessing Bloom ===
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.6, 0.95);
-bloomPass.threshold = 0;
-bloomPass.strength = 2.0;
-bloomPass.radius = 1.0;
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.0, 0.4, 0.85);
 composer.addPass(bloomPass);
 
 // === Animate ===
@@ -121,11 +122,11 @@ function animate() {
   time += 0.01;
   sunUniforms.time.value = time;
 
-  // Sun pulsates
-  const scale = 1.0 + 0.2 * Math.sin(time * 1.5);
+  // Sun pulsates in size
+  const scale = 1.5 + 0.2 * Math.sin(time * 1.2);
   sun.scale.set(scale, scale, scale);
 
-  // Animate rings
+  // Animate Rings
   for (const ring of rings) {
     const pos = ring.geometry.attributes.position;
     const { radius, amplitude, frequency, phase } = ring.userData;
@@ -143,6 +144,7 @@ function animate() {
 }
 animate();
 
+// Responsive
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
