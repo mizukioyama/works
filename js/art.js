@@ -4,19 +4,13 @@ import { EffectComposer } from "https://esm.sh/three@0.158.0/examples/jsm/postpr
 import { RenderPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/RenderPass";
 import { UnrealBloomPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/UnrealBloomPass";
 
-// Layers
-const LAYER_SUN = 1;
-const LAYER_MOON = 10;
-const LAYER_RING = 1000;
-
 // Scene
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 
 // Camera
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 0, 8);
-camera.layers.enableAll();
+camera.position.set(0, 0, 10);
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
@@ -27,34 +21,33 @@ renderer.setPixelRatio(window.devicePixelRatio);
 const controls = new OrbitControls(camera, renderer.domElement);
 
 // Lights
+scene.add(new THREE.AmbientLight(0x222222));
 const pointLight = new THREE.PointLight(0xffffff, 2, 100);
 pointLight.position.set(5, 5, 5);
 scene.add(pointLight);
-scene.add(new THREE.AmbientLight(0x333333));
 
-// Sun
+// Sun (中央でボケる)
 const sunGeo = new THREE.SphereGeometry(1, 64, 64);
 const sunMat = new THREE.MeshStandardMaterial({
   color: 0xffcc00,
   emissive: 0xffaa00,
-  emissiveIntensity: 0.8,
-  metalness: 0.4,
+  emissiveIntensity: 1.5,
+  metalness: 0.2,
   roughness: 0.4
 });
 const sun = new THREE.Mesh(sunGeo, sunMat);
-sun.layers.set(LAYER_SUN);
 scene.add(sun);
 
-// Moon
+// Moon (前に配置して隠す)
 const moonGeo = new THREE.SphereGeometry(1.05, 64, 64);
 const moonMat = new THREE.MeshStandardMaterial({
   color: 0x000000,
-  metalness: 0.2,
-  roughness: 0.9
+  emissive: 0x000000,
+  metalness: 0.5,
+  roughness: 1.0
 });
 const moon = new THREE.Mesh(moonGeo, moonMat);
-moon.position.set(-3, 0, 0);
-moon.layers.set(LAYER_MOON);
+moon.position.set(-3, 0, 2);  // Zを+にして前面に
 scene.add(moon);
 
 // Rings
@@ -63,7 +56,7 @@ const ringSegments = 128;
 const rings = [];
 for (let j = 0; j < ringCount; j++) {
   const radius = 1.5 + Math.random() * 3;
-  const amplitude = 0.03 + Math.random() * 0.12;
+  const amplitude = 0.02 + Math.random() * 0.1;
   const frequency = 2 + Math.random() * 5;
   const phase = Math.random() * Math.PI * 2;
   const hue = 40 + Math.random() * 40;
@@ -82,25 +75,23 @@ for (let j = 0; j < ringCount; j++) {
   const ringMaterial = new THREE.LineBasicMaterial({
     color,
     transparent: true,
-    opacity: 0.1 + Math.random() * 0.3
+    opacity: 0.05 + Math.random() * 0.2
   });
 
   const ring = new THREE.LineLoop(ringGeometry, ringMaterial);
   ring.userData = { radius, amplitude, frequency, phase };
-  ring.layers.set(LAYER_RING);
   scene.add(ring);
   rings.push(ring);
 }
 
-// Postprocessing (Bloom)
-const bloomComposer = new EffectComposer(renderer);
-const bloomRenderPass = new RenderPass(scene, camera);
-bloomComposer.addPass(bloomRenderPass);
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.0, 0.6, 0.95);
+// Bloom (全体)
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.6, 0.95);
 bloomPass.threshold = 0;
-bloomPass.strength = 2.5;
-bloomPass.radius = 1.2;
-bloomComposer.addPass(bloomPass);
+bloomPass.strength = 2.0;
+bloomPass.radius = 1.0;
+composer.addPass(bloomPass);
 
 // Animate
 let time = 0;
@@ -108,9 +99,13 @@ function animate() {
   requestAnimationFrame(animate);
   time += 0.01;
 
-  // Animate Moon
+  // Moon motion
   moon.position.x += 0.01;
   if (moon.position.x > 3) moon.position.x = -3;
+
+  // Sun scale (脈動)
+  const scale = 1.0 + 0.3 * Math.sin(time * 1.5);
+  sun.scale.set(scale, scale, scale);
 
   // Animate Rings
   for (const ring of rings) {
@@ -125,31 +120,14 @@ function animate() {
     pos.needsUpdate = true;
   }
 
-  // Animate Sun scaling (pulsing)
-  const scale = 1.0 + 0.2 * Math.sin(time * 1.5);
-  sun.scale.set(scale, scale, scale);
-
-  // Render Bloom Layer Only
-  camera.layers.set(LAYER_SUN);
-  renderer.clear();
-  bloomComposer.render();
-
-  // Render Rings Over
-  camera.layers.set(LAYER_RING);
-  renderer.render(scene, camera);
-
-  // Render Moon on Top
-  camera.layers.set(LAYER_MOON);
-  renderer.render(scene, camera);
-
   controls.update();
+  composer.render();
 }
 animate();
 
-// Responsive
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  bloomComposer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
 });
