@@ -4,25 +4,29 @@ import { EffectComposer } from "https://esm.sh/three@0.158.0/examples/jsm/postpr
 import { RenderPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/RenderPass";
 import { UnrealBloomPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/UnrealBloomPass";
 
-// === Scene setup ===
+// Scene
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 
+// Camera
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 0, 10);
 
+// Renderer
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
+// Controls
 const controls = new OrbitControls(camera, renderer.domElement);
 
+// Lights
 scene.add(new THREE.AmbientLight(0x222222));
 const pointLight = new THREE.PointLight(0xffffff, 2, 100);
 pointLight.position.set(5, 5, 5);
 scene.add(pointLight);
 
-// === Custom shader for the sun ===
+// === Custom shader for the Sun (morphing new moon to full moon) ===
 const sunUniforms = {
   time: { value: 0.0 },
   color: { value: new THREE.Color(0xffcc00) },
@@ -48,16 +52,22 @@ const sunMaterial = new THREE.ShaderMaterial({
 
     void main() {
       float d = distance(vUv, vec2(0.5));
-      float eclipsePhase = 0.5 + 0.5 * sin(time * 0.5);
-      float mask = smoothstep(eclipsePhase - 0.05, eclipsePhase + 0.05, vUv.x);
-
       if (d > 0.5) discard;
-      gl_FragColor = vec4(color * (1.0 - mask) + emissiveColor * mask, 1.0);
+
+      // Eclipse phase oscillates from 0.0 (full) to 1.0 (new moon)
+      float phase = 0.5 + 0.5 * sin(time * 0.5);
+      float cutX = 0.5 + (phase - 0.5) * 0.5;
+
+      // Mask to simulate moon phase
+      float mask = smoothstep(cutX - 0.02, cutX + 0.02, vUv.x) * (1.0 - smoothstep(1.0 - cutX - 0.02, 1.0 - cutX + 0.02, vUv.x));
+
+      vec3 finalColor = mix(color, emissiveColor, 0.5 + 0.5 * mask);
+      gl_FragColor = vec4(finalColor, 1.0);
     }
   `,
 });
 
-const sunGeo = new THREE.SphereGeometry(1, 64, 64);
+const sunGeo = new THREE.SphereGeometry(1, 128, 128);
 const sun = new THREE.Mesh(sunGeo, sunMaterial);
 scene.add(sun);
 
@@ -95,7 +105,7 @@ for (let j = 0; j < ringCount; j++) {
   rings.push(ring);
 }
 
-// === Bloom Composer ===
+// === Bloom ===
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.6, 0.95);
@@ -109,11 +119,13 @@ let time = 0;
 function animate() {
   requestAnimationFrame(animate);
   time += 0.01;
-
   sunUniforms.time.value = time;
+
+  // Sun pulsates
   const scale = 1.0 + 0.2 * Math.sin(time * 1.5);
   sun.scale.set(scale, scale, scale);
 
+  // Animate rings
   for (const ring of rings) {
     const pos = ring.geometry.attributes.position;
     const { radius, amplitude, frequency, phase } = ring.userData;
