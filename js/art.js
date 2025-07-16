@@ -26,29 +26,27 @@ const pointLight = new THREE.PointLight(0xffffff, 2, 100);
 pointLight.position.set(5, 5, 5);
 scene.add(pointLight);
 
-// Sun (中央でボケる)
+// Sun (中央)
 const sunGeo = new THREE.SphereGeometry(1, 64, 64);
 const sunMat = new THREE.MeshStandardMaterial({
   color: 0xffcc00,
   emissive: 0xffaa00,
-  emissiveIntensity: 1.5,
+  emissiveIntensity: 2.0,
   metalness: 0.2,
   roughness: 0.4
 });
 const sun = new THREE.Mesh(sunGeo, sunMat);
 scene.add(sun);
 
-// Moon (前に配置して隠す)
-const moonGeo = new THREE.SphereGeometry(1.05, 64, 64);
-const moonMat = new THREE.MeshStandardMaterial({
+// "Moon Mask" ＝ 太陽を隠す黒い円盤（透明背景のマスクとして使う）
+const maskGeo = new THREE.SphereGeometry(1.05, 64, 64);
+const maskMat = new THREE.MeshStandardMaterial({
   color: 0x000000,
-  emissive: 0x000000,
   metalness: 0.5,
   roughness: 1.0
 });
-const moon = new THREE.Mesh(moonGeo, moonMat);
-moon.position.set(-3, 0, 2);  // Zを+にして前面に
-scene.add(moon);
+const eclipseMask = new THREE.Mesh(maskGeo, maskMat);
+scene.add(eclipseMask);
 
 // Rings
 const ringCount = 1000;
@@ -84,7 +82,7 @@ for (let j = 0; j < ringCount; j++) {
   rings.push(ring);
 }
 
-// Bloom (全体)
+// Bloom
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.6, 0.95);
@@ -99,13 +97,12 @@ function animate() {
   requestAnimationFrame(animate);
   time += 0.01;
 
-  // Moon motion
-  moon.position.x += 0.01;
-  if (moon.position.x > 3) moon.position.x = -3;
-
-  // Sun scale (脈動)
-  const scale = 1.0 + 0.3 * Math.sin(time * 1.5);
+  // Sun pulsates (サイズ変化)
+  const scale = 1.0 + 0.2 * Math.sin(time * 1.5);
   sun.scale.set(scale, scale, scale);
+
+  // "Mask" moves to create eclipse effect
+  eclipseMask.position.x = 2 * Math.sin(time * 0.5);
 
   // Animate Rings
   for (const ring of rings) {
