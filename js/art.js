@@ -132,26 +132,40 @@ function animate() {
   time += 0.01;
   sunUniforms.time.value = time;
 
-  // Sun pulsates size
   const scale = 1.0 + 0.2 * Math.sin(time * 1.5);
   sun.scale.set(scale, scale, scale);
 
-  // Animate rings
   for (const ring of rings) {
     const pos = ring.geometry.attributes.position;
+    const colors = ring.geometry.attributes.color;
     const { radius, amplitude, frequency, phase } = ring.userData;
+
     for (let i = 0; i < ringSegments; i++) {
       const angle = (i / ringSegments) * Math.PI * 2;
       const wave = amplitude * Math.sin(angle * frequency + time + phase);
+
       pos.array[i * 3] = Math.cos(angle) * (radius + wave);
       pos.array[i * 3 + 1] = Math.sin(angle) * (radius + wave);
+
+      // 色の時間変化
+      const t = time * 10 + angle;
+      const hue = 45 + 15 * Math.sin(t + phase); // 太陽色：黄〜オレンジ
+      const color = new THREE.Color();
+      color.setHSL(hue / 360, 1.0, 0.6);
+
+      colors.array[i * 3] = color.r;
+      colors.array[i * 3 + 1] = color.g;
+      colors.array[i * 3 + 2] = color.b;
     }
+
     pos.needsUpdate = true;
+    colors.needsUpdate = true;
   }
 
   controls.update();
   composer.render();
 }
+
 animate();
 
 window.addEventListener('resize', () => {
