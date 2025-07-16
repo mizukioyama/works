@@ -4,29 +4,26 @@ import { EffectComposer } from "https://esm.sh/three@0.158.0/examples/jsm/postpr
 import { RenderPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/RenderPass";
 import { UnrealBloomPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/UnrealBloomPass";
 
-// Scene
+// === Scene, Camera, Renderer ===
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 
-// Camera
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 0, 12);
+camera.position.set(0, 0, 10);
 
-// Renderer
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
-// Controls
 const controls = new OrbitControls(camera, renderer.domElement);
 
-// Lights
+// === Lights ===
 scene.add(new THREE.AmbientLight(0x222222));
 const pointLight = new THREE.PointLight(0xffffff, 2, 100);
 pointLight.position.set(5, 5, 5);
 scene.add(pointLight);
 
-// === Sun Shader ===
+// === Sun ShaderMaterial (simulating moon phases) ===
 const sunUniforms = {
   time: { value: 0.0 },
   color: { value: new THREE.Color(0xffcc00) },
@@ -54,53 +51,63 @@ const sunMaterial = new THREE.ShaderMaterial({
       float d = distance(vUv, vec2(0.5));
       if (d > 0.5) discard;
 
-      // -1 (new moon) to +1 (full moon)
-      float phase = sin(time * 0.2);
-      float cutoff = 0.5 + 0.5 * phase;
-      float edge = smoothstep(cutoff - 0.02, cutoff + 0.02, vUv.x) * (1.0 - smoothstep(1.0 - cutoff - 0.02, 1.0 - cutoff + 0.02, vUv.x));
+      // Phase moves from 0 (new moon) to 1 (full moon)
+      float phase = 0.5 + 0.5 * sin(time * 0.2);
 
-      float brightness = mix(0.1, 1.0, edge);
-      vec3 finalColor = mix(color * 0.2, emissiveColor, brightness);
-      gl_FragColor = vec4(finalColor, 1.0);
+      // simulate crescent / half / gibbous
+      float offset = (phase - 0.5) * 1.5;
+      float cut = smoothstep(0.48 + offset, 0.52 + offset, vUv.x);
+
+      float visibility = cut * (1.0 - d * 2.0);
+      visibility = clamp(visibility, 0.0, 1.0);
+
+      // Soft edge
+      visibility = smoothstep(0.0, 0.8, visibility);
+
+      gl_FragColor = vec4(mix(color, emissiveColor, visibility), visibility);
     }
   `,
 });
 
-const sunGeo = new THREE.SphereGeometry(1.5, 128, 128);
+const sunGeo = new THREE.SphereGeometry(1, 128, 128);
 const sun = new THREE.Mesh(sunGeo, sunMaterial);
 scene.add(sun);
 
-// === Rings ===
-const ringCount = 150;
+// === Wavy Colorful Rings ===
+const ringCount = 1000;
 const ringSegments = 128;
 const rings = [];
-
 for (let j = 0; j < ringCount; j++) {
-  const radius = 2.5 + Math.random() * 4;
-  const amplitude = 0.02 + Math.random() * 0.1;
-  const frequency = 2 + Math.random() * 5;
+  const radius = 1.5 + Math.random() * 3;
+  const amplitude = 0.02 + Math.random() * 0.08;
+  const frequency = 2 + Math.random() * 4;
   const phase = Math.random() * Math.PI * 2;
 
-  const ringGeometry = new THREE.BufferGeometry();
+  // Geometry
   const positions = new Float32Array(ringSegments * 3);
+  const colors = new Float32Array(ringSegments * 3);
   for (let i = 0; i < ringSegments; i++) {
     const angle = (i / ringSegments) * Math.PI * 2;
     positions[i * 3] = Math.cos(angle) * radius;
     positions[i * 3 + 1] = Math.sin(angle) * radius;
     positions[i * 3 + 2] = 0;
-  }
-  ringGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-  // HSL color gradient based on angle
-  const hue = 40 + Math.random() * 40;
-  const sat = 80 + Math.random() * 20;
-  const light = 50 + Math.random() * 10;
-  const color = new THREE.Color(`hsl(${hue}, ${sat}%, ${light}%)`);
+    // Color gradient by angle
+    const hue = (angle / Math.PI / 2) * 360.0 + Math.random() * 30;
+    const color = new THREE.Color(`hsl(${hue % 360}, 100%, 60%)`);
+    colors[i * 3] = color.r;
+    colors[i * 3 + 1] = color.g;
+    colors[i * 3 + 2] = color.b;
+  }
+
+  const ringGeometry = new THREE.BufferGeometry();
+  ringGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  ringGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
   const ringMaterial = new THREE.LineBasicMaterial({
-    color,
+    vertexColors: true,
     transparent: true,
-    opacity: 0.05 + Math.random() * 0.2
+    opacity: 0.05 + Math.random() * 0.2,
   });
 
   const ring = new THREE.LineLoop(ringGeometry, ringMaterial);
@@ -109,10 +116,13 @@ for (let j = 0; j < ringCount; j++) {
   rings.push(ring);
 }
 
-// === Postprocessing Bloom ===
+// === Bloom ===
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.0, 0.4, 0.85);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.6, 0.95);
+bloomPass.threshold = 0;
+bloomPass.strength = 2.0;
+bloomPass.radius = 1.0;
 composer.addPass(bloomPass);
 
 // === Animate ===
@@ -122,11 +132,11 @@ function animate() {
   time += 0.01;
   sunUniforms.time.value = time;
 
-  // Sun pulsates in size
-  const scale = 1.5 + 0.2 * Math.sin(time * 1.2);
+  // Sun pulsates size
+  const scale = 1.0 + 0.2 * Math.sin(time * 1.5);
   sun.scale.set(scale, scale, scale);
 
-  // Animate Rings
+  // Animate rings
   for (const ring of rings) {
     const pos = ring.geometry.attributes.position;
     const { radius, amplitude, frequency, phase } = ring.userData;
@@ -144,7 +154,6 @@ function animate() {
 }
 animate();
 
-// Responsive
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
