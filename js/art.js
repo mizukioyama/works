@@ -4,7 +4,7 @@
     import { RenderPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/RenderPass";
     import { UnrealBloomPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/UnrealBloomPass";
 
-    // === Scene, Camera, Renderer ===
+    // === Scene Setup ===
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
 
@@ -17,17 +17,17 @@
 
     const controls = new OrbitControls(camera, renderer.domElement);
 
-    // === Lights ===
+    // === Lighting ===
     scene.add(new THREE.AmbientLight(0x222222));
     const pointLight = new THREE.PointLight(0xffffff, 2, 100);
     pointLight.position.set(5, 5, 5);
     scene.add(pointLight);
 
-    // === Sun Shader (phases) ===
+    // === Sun with Phase Shader ===
     const sunUniforms = {
       time: { value: 0.0 },
       speed: { value: 0.05 },
-      edgeSoftness: { value: 0.1 },
+      edgeSoftness: { value: 0.12 },
       color: { value: new THREE.Color(0xffcc00) },
       emissiveColor: { value: new THREE.Color(0xffaa00) },
     };
@@ -35,7 +35,6 @@
     const sunMaterial = new THREE.ShaderMaterial({
       uniforms: sunUniforms,
       transparent: true,
-      side: THREE.FrontSide,
       vertexShader: `
         varying vec2 vUv;
         void main() {
@@ -55,14 +54,12 @@
           float d = distance(vUv, vec2(0.5));
           if (d > 0.5) discard;
 
-          // Smooth lunar phase curve
-          float rawPhase = sin(time * speed);
-          float phase = sign(rawPhase) * pow(abs(rawPhase), 0.7);
+          float cycle = sin(time * speed);
+          float phase = sign(cycle) * pow(abs(cycle), 0.8);
 
-          float cutoff = smoothstep(0.5 + phase * 0.35 - edgeSoftness, 0.5 + phase * 0.35 + edgeSoftness, vUv.x);
+          float cutoff = smoothstep(0.5 + phase * 0.4 - edgeSoftness, 0.5 + phase * 0.4 + edgeSoftness, vUv.x);
 
           float fade = 1.0 - smoothstep(0.4, 0.5, d);
-
           float visibility = cutoff * fade;
           visibility = smoothstep(0.0, 1.0, visibility);
 
@@ -75,14 +72,14 @@
     const sun = new THREE.Mesh(sunGeo, sunMaterial);
     scene.add(sun);
 
-    // === Wavy Colorful Rings ===
+    // === Rings ===
     const ringCount = 1000;
     const ringSegments = 128;
     const rings = [];
 
     for (let j = 0; j < ringCount; j++) {
       const radius = 1.5 + Math.random() * 3;
-      const amplitude = 0.02 + Math.random() * 0.08;
+      const baseAmplitude = 0.02 + Math.random() * 0.08;
       const frequency = 2 + Math.random() * 4;
       const phase = Math.random() * Math.PI * 2;
 
@@ -102,18 +99,25 @@
         colors[i * 3 + 2] = color.b;
       }
 
-      const ringGeometry = new THREE.BufferGeometry();
-      ringGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      ringGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-      const ringMaterial = new THREE.LineBasicMaterial({
+      const material = new THREE.LineBasicMaterial({
         vertexColors: true,
         transparent: true,
         opacity: 0.05 + Math.random() * 0.2,
       });
 
-      const ring = new THREE.LineLoop(ringGeometry, ringMaterial);
-      ring.userData = { radius, amplitude, frequency, phase };
+      const ring = new THREE.LineLoop(geometry, material);
+      ring.userData = {
+        radius,
+        baseAmplitude,
+        frequency,
+        phase,
+        ampModSeed1: Math.random() * 100,
+        ampModSeed2: Math.random() * 100
+      };
       scene.add(ring);
       rings.push(ring);
     }
@@ -134,22 +138,29 @@
       time += 0.01;
       sunUniforms.time.value = time;
 
-      // Pulsate sun size
+      // Sun pulsates
       const scale = 1.0 + 0.2 * Math.sin(time * 1.5);
       sun.scale.set(scale, scale, scale);
 
-      // Animate rings
       for (const ring of rings) {
         const pos = ring.geometry.attributes.position;
         const colors = ring.geometry.attributes.color;
-        const { radius, amplitude, frequency, phase } = ring.userData;
+        const {
+          radius,
+          baseAmplitude,
+          frequency,
+          phase,
+          ampModSeed1,
+          ampModSeed2
+        } = ring.userData;
 
-        // Complex modulator with multiple sine waves
-        const n1 = Math.sin(time * 0.1 + phase);
-        const n2 = Math.sin(time * 0.27 + phase * 1.3);
-        const n3 = Math.sin(time * 0.55 + phase * 2.1);
-        const modulator = 0.5 + 0.5 * (0.5 * n1 + 0.3 * n2 + 0.2 * n3);
-        const dynamicAmp = amplitude * modulator;
+        // Amplitude modulation with multiple slow sine waves for dynamic change
+        const ampMod = 0.5 + 0.5 * (
+          0.4 * Math.sin(time * 0.07 + ampModSeed1) +
+          0.3 * Math.sin(time * 0.13 + ampModSeed2) +
+          0.3 * Math.sin(time * 0.21 + ampModSeed1 * 0.5)
+        );
+        const dynamicAmp = baseAmplitude * (0.5 + ampMod);
 
         for (let i = 0; i < ringSegments; i++) {
           const angle = (i / ringSegments) * Math.PI * 2;
@@ -158,8 +169,8 @@
           pos.array[i * 3] = Math.cos(angle) * (radius + wave);
           pos.array[i * 3 + 1] = Math.sin(angle) * (radius + wave);
 
-          // Color time modulation (sunlike)
-          const t = time * 10 + angle;
+          // Sun-like color shift over time
+          const t = time * 8 + angle;
           const hue = 40 + 20 * Math.sin(t + phase);
           const color = new THREE.Color();
           color.setHSL(hue / 360, 1.0, 0.6);
