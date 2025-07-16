@@ -15,7 +15,10 @@
     canvas {
       display: block;
     }
-    main {
+    .bg {
+      content: "";
+      display: block;
+      position: relative;
       width: 100vw;
       height: 100vh;
       backdrop-filter: blur(10px);
@@ -26,7 +29,9 @@
 <body>
   <canvas id="canvas"></canvas>
   <script type="module" src="js/art.js"></script>
-  <main></main>
+  <main>
+    <div class="bg"></div>
+  </main>
 </body>
 
 </html>
