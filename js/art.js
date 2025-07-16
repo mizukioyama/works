@@ -4,51 +4,64 @@ import { EffectComposer } from "https://esm.sh/three@0.158.0/examples/jsm/postpr
 import { RenderPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/RenderPass";
 import { UnrealBloomPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/UnrealBloomPass";
 
-// Scene
+// === Scene setup ===
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 
-// Camera
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 0, 10);
 
-// Renderer
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
-// Controls
 const controls = new OrbitControls(camera, renderer.domElement);
 
-// Lights
 scene.add(new THREE.AmbientLight(0x222222));
 const pointLight = new THREE.PointLight(0xffffff, 2, 100);
 pointLight.position.set(5, 5, 5);
 scene.add(pointLight);
 
-// Sun (中央)
-const sunGeo = new THREE.SphereGeometry(1, 64, 64);
-const sunMat = new THREE.MeshStandardMaterial({
-  color: 0xffcc00,
-  emissive: 0xffaa00,
-  emissiveIntensity: 2.0,
-  metalness: 0.2,
-  roughness: 0.4
+// === Custom shader for the sun ===
+const sunUniforms = {
+  time: { value: 0.0 },
+  color: { value: new THREE.Color(0xffcc00) },
+  emissiveColor: { value: new THREE.Color(0xffaa00) },
+};
+
+const sunMaterial = new THREE.ShaderMaterial({
+  uniforms: sunUniforms,
+  transparent: true,
+  side: THREE.FrontSide,
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform float time;
+    uniform vec3 color;
+    uniform vec3 emissiveColor;
+    varying vec2 vUv;
+
+    void main() {
+      float d = distance(vUv, vec2(0.5));
+      float eclipsePhase = 0.5 + 0.5 * sin(time * 0.5);
+      float mask = smoothstep(eclipsePhase - 0.05, eclipsePhase + 0.05, vUv.x);
+
+      if (d > 0.5) discard;
+      gl_FragColor = vec4(color * (1.0 - mask) + emissiveColor * mask, 1.0);
+    }
+  `,
 });
-const sun = new THREE.Mesh(sunGeo, sunMat);
+
+const sunGeo = new THREE.SphereGeometry(1, 64, 64);
+const sun = new THREE.Mesh(sunGeo, sunMaterial);
 scene.add(sun);
 
-// "Moon Mask" ＝ 太陽を隠す黒い円盤（透明背景のマスクとして使う）
-const maskGeo = new THREE.SphereGeometry(1.05, 64, 64);
-const maskMat = new THREE.MeshStandardMaterial({
-  color: 0x000000,
-  metalness: 0.5,
-  roughness: 1.0
-});
-const eclipseMask = new THREE.Mesh(maskGeo, maskMat);
-scene.add(eclipseMask);
-
-// Rings
+// === Wavy Rings ===
 const ringCount = 1000;
 const ringSegments = 128;
 const rings = [];
@@ -82,7 +95,7 @@ for (let j = 0; j < ringCount; j++) {
   rings.push(ring);
 }
 
-// Bloom
+// === Bloom Composer ===
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.6, 0.95);
@@ -91,20 +104,16 @@ bloomPass.strength = 2.0;
 bloomPass.radius = 1.0;
 composer.addPass(bloomPass);
 
-// Animate
+// === Animate ===
 let time = 0;
 function animate() {
   requestAnimationFrame(animate);
   time += 0.01;
 
-  // Sun pulsates (サイズ変化)
+  sunUniforms.time.value = time;
   const scale = 1.0 + 0.2 * Math.sin(time * 1.5);
   sun.scale.set(scale, scale, scale);
 
-  // "Mask" moves to create eclipse effect
-  eclipseMask.position.x = 2 * Math.sin(time * 0.5);
-
-  // Animate Rings
   for (const ring of rings) {
     const pos = ring.geometry.attributes.position;
     const { radius, amplitude, frequency, phase } = ring.userData;
