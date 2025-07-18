@@ -1,198 +1,127 @@
-    import * as THREE from "https://esm.sh/three@0.158.0";
-    import { OrbitControls } from "https://esm.sh/three@0.158.0/examples/jsm/controls/OrbitControls";
-    import { EffectComposer } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/EffectComposer";
-    import { RenderPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/RenderPass";
-    import { UnrealBloomPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/UnrealBloomPass";
+import * as THREE from 'https://cdn.skypack.dev/three@0.150.0';
+import { OrbitControls } from 'https://cdn.skypack.dev/three/examples/jsm/controls/OrbitControls.js';
 
-    // === Scene Setup ===
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000);
+let scene = new THREE.Scene();
+let camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.z = 5;
 
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 0, 10);
+let renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+// 太陽（光る球体）
+let sunGeometry = new THREE.SphereGeometry(1, 128, 128);
+let sunMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    time: { value: 0.0 },
+    resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+    color1: { value: new THREE.Color("#fff89e") }, // 中心：白黄色
+    color2: { value: new THREE.Color("#ff8800") }, // 外周：橙
+    shadowProgress: { value: 0.0 }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform float time;
+    uniform vec2 resolution;
+    uniform vec3 color1;
+    uniform vec3 color2;
+    uniform float shadowProgress;
+    varying vec2 vUv;
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-
-    // === Lighting ===
-    scene.add(new THREE.AmbientLight(0x222222));
-    const pointLight = new THREE.PointLight(0xffffff, 2, 100);
-    pointLight.position.set(5, 5, 5);
-    scene.add(pointLight);
-
-    // === Sun with Phase Shader ===
-    const sunUniforms = {
-      time: { value: 0.0 },
-      speed: { value: 0.05 },
-      edgeSoftness: { value: 0.12 },
-      color: { value: new THREE.Color(0xffcc00) },
-      emissiveColor: { value: new THREE.Color(0xffaa00) },
-    };
-
-    const sunMaterial = new THREE.ShaderMaterial({
-      uniforms: sunUniforms,
-      transparent: true,
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform float time;
-        uniform float speed;
-        uniform float edgeSoftness;
-        uniform vec3 color;
-        uniform vec3 emissiveColor;
-        varying vec2 vUv;
-
-        void main() {
-          float d = distance(vUv, vec2(0.5));
-          if (d > 0.5) discard;
-
-          float cycle = sin(time * speed);
-          float phase = sign(cycle) * pow(abs(cycle), 0.8);
-
-          float cutoff = smoothstep(0.5 + phase * 0.4 - edgeSoftness, 0.5 + phase * 0.4 + edgeSoftness, vUv.x);
-
-          float fade = 1.0 - smoothstep(0.4, 0.5, d);
-          float visibility = cutoff * fade;
-          visibility = smoothstep(0.0, 1.0, visibility);
-
-          gl_FragColor = vec4(mix(color, emissiveColor, visibility), visibility);
-        }
-      `,
-    });
-
-    const sunGeo = new THREE.SphereGeometry(1, 128, 128);
-    const sun = new THREE.Mesh(sunGeo, sunMaterial);
-    scene.add(sun);
-
-    // === Rings ===
-    const ringCount = 1000;
-    const ringSegments = 128;
-    const rings = [];
-
-    for (let j = 0; j < ringCount; j++) {
-      const radius = 1.5 + Math.random() * 3;
-      const baseAmplitude = 0.02 + Math.random() * 0.08;
-      const frequency = 2 + Math.random() * 4;
-      const phase = Math.random() * Math.PI * 2;
-
-      const positions = new Float32Array(ringSegments * 3);
-      const colors = new Float32Array(ringSegments * 3);
-
-      for (let i = 0; i < ringSegments; i++) {
-        const angle = (i / ringSegments) * Math.PI * 2;
-        positions[i * 3] = Math.cos(angle) * radius;
-        positions[i * 3 + 1] = Math.sin(angle) * radius;
-        positions[i * 3 + 2] = 0;
-
-        const hue = (angle / Math.PI / 2) * 360.0 + Math.random() * 30;
-        const color = new THREE.Color(`hsl(${hue % 360}, 100%, 60%)`);
-        colors[i * 3] = color.r;
-        colors[i * 3 + 1] = color.g;
-        colors[i * 3 + 2] = color.b;
-      }
-
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-      const material = new THREE.LineBasicMaterial({
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.05 + Math.random() * 0.2,
-      });
-
-      const ring = new THREE.LineLoop(geometry, material);
-      ring.userData = {
-        radius,
-        baseAmplitude,
-        frequency,
-        phase,
-        ampModSeed1: Math.random() * 100,
-        ampModSeed2: Math.random() * 100
-      };
-      scene.add(ring);
-      rings.push(ring);
+    float circle(vec2 uv, float radius) {
+      return smoothstep(radius, radius - 0.01, length(uv - 0.5));
     }
 
-    // === Bloom ===
-    const composer = new EffectComposer(renderer);
-    composer.addPass(new RenderPass(scene, camera));
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.6, 0.95);
-    bloomPass.threshold = 0;
-    bloomPass.strength = 2.0;
-    bloomPass.radius = 1.0;
-    composer.addPass(bloomPass);
+    void main() {
+      vec2 uv = vUv;
+      vec2 center = vec2(0.5);
+      float dist = distance(uv, center);
 
-    // === Animate ===
-    let time = 0;
-    function animate() {
-      requestAnimationFrame(animate);
-      time += 0.01;
-      sunUniforms.time.value = time;
+      // 太陽のグラデーション
+      float sun = 1.0 - smoothstep(0.0, 0.5, dist);
+      vec3 color = mix(color2, color1, sun);
 
-      // Sun pulsates
-      const scale = 1.0 + 0.2 * Math.sin(time * 1.5);
-      sun.scale.set(scale, scale, scale);
+      // 月の影（黒い領域が太陽を覆う）
+      float shadowSize = 0.5 * (1.0 - abs(2.0 * shadowProgress - 1.0)); // 満月で0、半月で最大
+      float shadow = smoothstep(shadowSize, shadowSize - 0.02, abs(uv.x - 0.5));
+      color *= 1.0 - shadow;
 
-      for (const ring of rings) {
-        const pos = ring.geometry.attributes.position;
-        const colors = ring.geometry.attributes.color;
-        const {
-          radius,
-          baseAmplitude,
-          frequency,
-          phase,
-          ampModSeed1,
-          ampModSeed2
-        } = ring.userData;
+      gl_FragColor = vec4(color, 1.0);
+    }
+  `,
+  transparent: false
+});
 
-        // Amplitude modulation with multiple slow sine waves for dynamic change
-        const ampMod = 0.5 + 0.5 * (
-          0.4 * Math.sin(time * 0.07 + ampModSeed1) +
-          0.3 * Math.sin(time * 0.13 + ampModSeed2) +
-          0.3 * Math.sin(time * 0.21 + ampModSeed1 * 0.5)
-        );
-        const dynamicAmp = baseAmplitude * (0.5 + ampMod);
+let sun = new THREE.Mesh(sunGeometry, sunMaterial);
+scene.add(sun);
 
-        for (let i = 0; i < ringSegments; i++) {
-          const angle = (i / ringSegments) * Math.PI * 2;
-          const wave = dynamicAmp * Math.sin(angle * frequency + time + phase);
+// 雲ノイズ背景（Plane）
+let cloudGeometry = new THREE.PlaneGeometry(10, 10);
+let cloudMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    time: { value: 0.0 }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main(){
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform float time;
+    varying vec2 vUv;
 
-          pos.array[i * 3] = Math.cos(angle) * (radius + wave);
-          pos.array[i * 3 + 1] = Math.sin(angle) * (radius + wave);
-
-          // Sun-like color shift over time
-          const t = time * 8 + angle;
-          const hue = 40 + 20 * Math.sin(t + phase);
-          const color = new THREE.Color();
-          color.setHSL(hue / 360, 1.0, 0.6);
-
-          colors.array[i * 3] = color.r;
-          colors.array[i * 3 + 1] = color.g;
-          colors.array[i * 3 + 2] = color.b;
-        }
-
-        pos.needsUpdate = true;
-        colors.needsUpdate = true;
-      }
-
-      controls.update();
-      composer.render();
+    float noise(vec2 p){
+      return fract(sin(dot(p ,vec2(12.9898,78.233))) * 43758.5453);
     }
 
-    animate();
+    void main(){
+      float n = noise(vUv * 10.0 + vec2(time * 0.05, time * 0.02));
+      vec3 col = vec3(n * 0.1);
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `,
+  depthWrite: false,
+  depthTest: false,
+  transparent: true
+});
+let clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
+clouds.position.z = -1.5;
+scene.add(clouds);
 
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      composer.setSize(window.innerWidth, window.innerHeight);
-    });
+// コントロール
+let controls = new OrbitControls(camera, renderer.domElement);
+
+// アニメーションループ
+let clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+
+  let t = clock.getElapsedTime();
+  let loopDuration = 10.0;
+  let progress = (t % loopDuration) / loopDuration; // 0.0 ~ 1.0
+
+  // 満ち欠けにイージングをかける
+  let eased = 0.5 - 0.5 * Math.cos(progress * 2.0 * Math.PI);
+  sunMaterial.uniforms.shadowProgress.value = eased;
+
+  // 更新
+  sunMaterial.uniforms.time.value = t;
+  cloudMaterial.uniforms.time.value = t;
+
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+});
