@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Hologram Sphere</title>
+    <style>
+      body { margin: 0; background: black; overflow: hidden; }
+      canvas { display: block; }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      import * as THREE from 'https://unpkg.com/three@0.160.1/build/three.module.js';
+      import { OrbitControls } from 'https://unpkg.com/three@0.160.1/examples/jsm/controls/OrbitControls.js';
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.z = 5;
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      // 球体本体（透明ホログラム）
+      const sphereGeometry = new THREE.SphereGeometry(1, 64, 64);
+      const sphereMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0x00ffff,
+        roughness: 0.1,
+        metalness: 0.5,
+        transparent: true,
+        opacity: 0.2,
+        transmission: 1.0,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.1
+      });
+      const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+      scene.add(sphere);
+
+      // 内部グリッド（動くライン）
+      const wireMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        wireframe: true,
+        opacity: 0.3,
+        transparent: true
+      });
+      const wireSphere = new THREE.Mesh(sphereGeometry, wireMaterial);
+      sphere.add(wireSphere);
+
+      // 光エフェクト
+      const pointLight = new THREE.PointLight(0x00ffff, 1, 20);
+      pointLight.position.set(3, 3, 3);
+      scene.add(pointLight);
+
+      const ambientLight = new THREE.AmbientLight(0x404040);
+      scene.add(ambientLight);
+
+      // コントロール
+      const controls = new OrbitControls(camera, renderer.domElement);
+
+      // アニメーション
+      function animate() {
+        requestAnimationFrame(animate);
+        sphere.rotation.y += 0.003;
+        wireSphere.rotation.x += 0.002;
+        wireSphere.rotation.y -= 0.002;
+
+        // ホログラム色の変化
+        const time = Date.now() * 0.002;
+        sphere.material.color.setHSL((time % 360) / 360, 1.0, 0.5);
+
+        renderer.render(scene, camera);
+      }
+
+      animate();
+
+      // リサイズ対応
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    </script>
+  </body>
+</html>

@@ -6,8 +6,10 @@
 
     // === Scene Setup ===
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.z = 10;
+    scene.background = new THREE.Color(0x000000);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 10);
 
     const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -21,10 +23,10 @@
     pointLight.position.set(5, 5, 5);
     scene.add(pointLight);
 
-    // === Sun (Shader-based moon phase) ===
+    // === Sun with Phase Shader ===
     const sunUniforms = {
       time: { value: 0.0 },
-      speed: { value: 0.3 },
+      speed: { value: 0.05 },
       edgeSoftness: { value: 0.12 },
       color: { value: new THREE.Color(0xffcc00) },
       emissiveColor: { value: new THREE.Color(0xffaa00) },
@@ -66,17 +68,18 @@
       `,
     });
 
-    const sun = new THREE.Mesh(new THREE.SphereGeometry(1.2, 128, 128), sunMaterial);
+    const sunGeo = new THREE.SphereGeometry(1, 128, 128);
+    const sun = new THREE.Mesh(sunGeo, sunMaterial);
     scene.add(sun);
 
     // === Rings ===
-    const ringCount = 800;
+    const ringCount = 1000;
     const ringSegments = 128;
     const rings = [];
 
     for (let j = 0; j < ringCount; j++) {
       const radius = 1.5 + Math.random() * 3;
-      const baseAmplitude = 0.01 + Math.random() * 0.08;
+      const baseAmplitude = 0.02 + Math.random() * 0.08;
       const frequency = 2 + Math.random() * 4;
       const phase = Math.random() * Math.PI * 2;
 
@@ -103,7 +106,7 @@
       const material = new THREE.LineBasicMaterial({
         vertexColors: true,
         transparent: true,
-        opacity: 0.05 + Math.random() * 0.15,
+        opacity: 0.05 + Math.random() * 0.2,
       });
 
       const ring = new THREE.LineLoop(geometry, material);
@@ -119,7 +122,7 @@
       rings.push(ring);
     }
 
-    // === Postprocessing (Bloom) ===
+    // === Bloom ===
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.6, 0.95);
@@ -135,11 +138,10 @@
       time += 0.01;
       sunUniforms.time.value = time;
 
-      // 太陽が微妙に脈動する
-      const scale = 1.0 + 0.1 * Math.sin(time * 1.5);
+      // Sun pulsates
+      const scale = 1.0 + 0.2 * Math.sin(time * 1.5);
       sun.scale.set(scale, scale, scale);
 
-      // 動的リング更新
       for (const ring of rings) {
         const pos = ring.geometry.attributes.position;
         const colors = ring.geometry.attributes.color;
@@ -152,23 +154,27 @@
           ampModSeed2
         } = ring.userData;
 
+        // Amplitude modulation with multiple slow sine waves for dynamic change
         const ampMod = 0.5 + 0.5 * (
           0.4 * Math.sin(time * 0.07 + ampModSeed1) +
           0.3 * Math.sin(time * 0.13 + ampModSeed2) +
           0.3 * Math.sin(time * 0.21 + ampModSeed1 * 0.5)
         );
-        const dynamicAmp = baseAmplitude * ampMod;
+        const dynamicAmp = baseAmplitude * (0.5 + ampMod);
 
         for (let i = 0; i < ringSegments; i++) {
           const angle = (i / ringSegments) * Math.PI * 2;
           const wave = dynamicAmp * Math.sin(angle * frequency + time + phase);
+
           pos.array[i * 3] = Math.cos(angle) * (radius + wave);
           pos.array[i * 3 + 1] = Math.sin(angle) * (radius + wave);
 
+          // Sun-like color shift over time
           const t = time * 8 + angle;
           const hue = 40 + 20 * Math.sin(t + phase);
           const color = new THREE.Color();
           color.setHSL(hue / 360, 1.0, 0.6);
+
           colors.array[i * 3] = color.r;
           colors.array[i * 3 + 1] = color.g;
           colors.array[i * 3 + 2] = color.b;
@@ -184,7 +190,6 @@
 
     animate();
 
-    // === Resize ===
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
