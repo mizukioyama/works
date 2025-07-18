@@ -1,89 +1,193 @@
-    import * as THREE from 'https://unpkg.com/three@0.160.1/build/three.module.js';
-    import { OrbitControls } from 'https://unpkg.com/three@0.160.1/examples/jsm/controls/OrbitControls.js';
+    import * as THREE from "https://esm.sh/three@0.158.0";
+    import { OrbitControls } from "https://esm.sh/three@0.158.0/examples/jsm/controls/OrbitControls";
+    import { EffectComposer } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/EffectComposer";
+    import { RenderPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/RenderPass";
+    import { UnrealBloomPass } from "https://esm.sh/three@0.158.0/examples/jsm/postprocessing/UnrealBloomPass";
 
+    // === Scene Setup ===
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 100);
-    camera.position.z = 5;
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.z = 10;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+    renderer.setPixelRatio(window.devicePixelRatio);
 
-    // 太陽（本体）
-    const sphereGeometry = new THREE.SphereGeometry(1, 64, 64);
-    const sphereMaterial = new THREE.ShaderMaterial({
-      uniforms: {
-        color1: { value: new THREE.Color('#ffffcc') },
-        color2: { value: new THREE.Color('#ffaa00') },
-        color3: { value: new THREE.Color('#ffffff') },
-      },
+    const controls = new OrbitControls(camera, renderer.domElement);
+
+    // === Lighting ===
+    scene.add(new THREE.AmbientLight(0x222222));
+    const pointLight = new THREE.PointLight(0xffffff, 2, 100);
+    pointLight.position.set(5, 5, 5);
+    scene.add(pointLight);
+
+    // === Sun (Shader-based moon phase) ===
+    const sunUniforms = {
+      time: { value: 0.0 },
+      speed: { value: 0.3 },
+      edgeSoftness: { value: 0.12 },
+      color: { value: new THREE.Color(0xffcc00) },
+      emissiveColor: { value: new THREE.Color(0xffaa00) },
+    };
+
+    const sunMaterial = new THREE.ShaderMaterial({
+      uniforms: sunUniforms,
+      transparent: true,
       vertexShader: `
-        varying vec3 vNormal;
-        varying vec3 vPosition;
+        varying vec2 vUv;
         void main() {
-          vNormal = normalize(normalMatrix * normal);
-          vPosition = position;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
       fragmentShader: `
-        uniform vec3 color1;
-        uniform vec3 color2;
-        uniform vec3 color3;
-        varying vec3 vNormal;
-        varying vec3 vPosition;
+        uniform float time;
+        uniform float speed;
+        uniform float edgeSoftness;
+        uniform vec3 color;
+        uniform vec3 emissiveColor;
+        varying vec2 vUv;
+
         void main() {
-          float intensity = dot(normalize(vNormal), vec3(0.0, 0.0, 1.0));
-          vec3 gradient = mix(color1, color2, vPosition.y * 0.5 + 0.5);
-          gradient = mix(gradient, color3, intensity);
-          gl_FragColor = vec4(gradient, 1.0);
+          float d = distance(vUv, vec2(0.5));
+          if (d > 0.5) discard;
+
+          float cycle = sin(time * speed);
+          float phase = sign(cycle) * pow(abs(cycle), 0.8);
+
+          float cutoff = smoothstep(0.5 + phase * 0.4 - edgeSoftness, 0.5 + phase * 0.4 + edgeSoftness, vUv.x);
+
+          float fade = 1.0 - smoothstep(0.4, 0.5, d);
+          float visibility = cutoff * fade;
+          visibility = smoothstep(0.0, 1.0, visibility);
+
+          gl_FragColor = vec4(mix(color, emissiveColor, visibility), visibility);
         }
       `,
     });
-    const sun = new THREE.Mesh(sphereGeometry, sphereMaterial);
+
+    const sun = new THREE.Mesh(new THREE.SphereGeometry(1.2, 128, 128), sunMaterial);
     scene.add(sun);
 
-    // 黒いマスク（月）
-    const moonMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-    const moon = new THREE.Mesh(new THREE.SphereGeometry(1.01, 64, 64), moonMaterial);
-    scene.add(moon);
+    // === Rings ===
+    const ringCount = 800;
+    const ringSegments = 128;
+    const rings = [];
 
-    // 光源
-    const pointLight = new THREE.PointLight(0xffffff, 2, 100);
-    pointLight.position.set(0, 0, 5);
-    scene.add(pointLight);
+    for (let j = 0; j < ringCount; j++) {
+      const radius = 1.5 + Math.random() * 3;
+      const baseAmplitude = 0.01 + Math.random() * 0.08;
+      const frequency = 2 + Math.random() * 4;
+      const phase = Math.random() * Math.PI * 2;
 
-    // コントロール
-    const controls = new OrbitControls(camera, renderer.domElement);
+      const positions = new Float32Array(ringSegments * 3);
+      const colors = new Float32Array(ringSegments * 3);
 
-    // リサイズ対応
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth/window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+      for (let i = 0; i < ringSegments; i++) {
+        const angle = (i / ringSegments) * Math.PI * 2;
+        positions[i * 3] = Math.cos(angle) * radius;
+        positions[i * 3 + 1] = Math.sin(angle) * radius;
+        positions[i * 3 + 2] = 0;
 
-    // 満ち欠けアニメーション
+        const hue = (angle / Math.PI / 2) * 360.0 + Math.random() * 30;
+        const color = new THREE.Color(`hsl(${hue % 360}, 100%, 60%)`);
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      const material = new THREE.LineBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.05 + Math.random() * 0.15,
+      });
+
+      const ring = new THREE.LineLoop(geometry, material);
+      ring.userData = {
+        radius,
+        baseAmplitude,
+        frequency,
+        phase,
+        ampModSeed1: Math.random() * 100,
+        ampModSeed2: Math.random() * 100
+      };
+      scene.add(ring);
+      rings.push(ring);
+    }
+
+    // === Postprocessing (Bloom) ===
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.6, 0.95);
+    bloomPass.threshold = 0;
+    bloomPass.strength = 2.0;
+    bloomPass.radius = 1.0;
+    composer.addPass(bloomPass);
+
+    // === Animate ===
     let time = 0;
     function animate() {
       requestAnimationFrame(animate);
       time += 0.01;
+      sunUniforms.time.value = time;
 
-      // 緩急をつけた振動（0～1の間を波のように動く）
-      const moonOffset = Math.cos(time) * 1.5;
+      // 太陽が微妙に脈動する
+      const scale = 1.0 + 0.1 * Math.sin(time * 1.5);
+      sun.scale.set(scale, scale, scale);
 
-      // スムーズに見えるようにカメラ方向に常に向ける
-      const direction = new THREE.Vector3();
-      camera.getWorldDirection(direction);
-      direction.normalize();
-      moon.position.copy(direction.multiplyScalar(moonOffset));
+      // 動的リング更新
+      for (const ring of rings) {
+        const pos = ring.geometry.attributes.position;
+        const colors = ring.geometry.attributes.color;
+        const {
+          radius,
+          baseAmplitude,
+          frequency,
+          phase,
+          ampModSeed1,
+          ampModSeed2
+        } = ring.userData;
 
-      // 形状の変化に合わせてスケール変化（擬似的に黒い月を小さくする）
-      const scale = 1.5 - 0.5 * Math.cos(time);
-      moon.scale.set(scale, scale, scale);
+        const ampMod = 0.5 + 0.5 * (
+          0.4 * Math.sin(time * 0.07 + ampModSeed1) +
+          0.3 * Math.sin(time * 0.13 + ampModSeed2) +
+          0.3 * Math.sin(time * 0.21 + ampModSeed1 * 0.5)
+        );
+        const dynamicAmp = baseAmplitude * ampMod;
+
+        for (let i = 0; i < ringSegments; i++) {
+          const angle = (i / ringSegments) * Math.PI * 2;
+          const wave = dynamicAmp * Math.sin(angle * frequency + time + phase);
+          pos.array[i * 3] = Math.cos(angle) * (radius + wave);
+          pos.array[i * 3 + 1] = Math.sin(angle) * (radius + wave);
+
+          const t = time * 8 + angle;
+          const hue = 40 + 20 * Math.sin(t + phase);
+          const color = new THREE.Color();
+          color.setHSL(hue / 360, 1.0, 0.6);
+          colors.array[i * 3] = color.r;
+          colors.array[i * 3 + 1] = color.g;
+          colors.array[i * 3 + 2] = color.b;
+        }
+
+        pos.needsUpdate = true;
+        colors.needsUpdate = true;
+      }
 
       controls.update();
-      renderer.render(scene, camera);
+      composer.render();
     }
 
     animate();
+
+    // === Resize ===
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+    });
