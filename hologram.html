@@ -1,80 +1,98 @@
 <!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>ホログラム球体</title>
-    <style>
-      body { margin: 0; background-color: black; }
-      canvas { display: block; }
-    </style>
-  </head>
-  <body>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js"></script>
+<head>
+  <meta charset="UTF-8">
+  <title>Hologram Sphere</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      background-color: black;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+    import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js';
 
-    <script>
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-      camera.position.z = 5;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 5;
 
-      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // ホログラム風 球体
+    const sphereGeometry = new THREE.SphereGeometry(1, 64, 64);
+
+    const sphereMaterial = new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color(0x00ffff),
+      roughness: 0.05,
+      metalness: 0.5,
+      transmission: 1.0,
+      transparent: true,
+      opacity: 0.3,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.1,
+      emissive: new THREE.Color(0x00ffff),
+      emissiveIntensity: 0.2
+    });
+
+    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+    scene.add(sphere);
+
+    // 内部のグリッド（ワイヤーフレーム）
+    const wireMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      wireframe: true,
+      opacity: 0.2,
+      transparent: true
+    });
+    const wireSphere = new THREE.Mesh(sphereGeometry, wireMaterial);
+    sphere.add(wireSphere);
+
+    // 光源
+    const ambientLight = new THREE.AmbientLight(0x404040);
+    scene.add(ambientLight);
+
+    const pointLight = new THREE.PointLight(0x00ffff, 1.2, 100);
+    pointLight.position.set(5, 5, 5);
+    scene.add(pointLight);
+
+    // カメラ操作
+    const controls = new OrbitControls(camera, renderer.domElement);
+
+    // アニメーション
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const time = performance.now() * 0.001;
+      sphere.rotation.y += 0.002;
+      wireSphere.rotation.x = Math.sin(time * 0.5) * 0.5;
+      wireSphere.rotation.y = Math.cos(time * 0.5) * 0.5;
+
+      // 色の変化（ホログラム風）
+      const hue = (time * 20) % 360;
+      sphere.material.color.setHSL(hue / 360, 1.0, 0.5);
+      sphere.material.emissive.setHSL(hue / 360, 1.0, 0.3);
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // リサイズ対応
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-      document.body.appendChild(renderer.domElement);
-
-      // 球体本体（ホログラム風）
-      const sphereGeometry = new THREE.SphereGeometry(1, 64, 64);
-      const sphereMaterial = new THREE.MeshPhongMaterial({
-        color: 0x00ffff,
-        transparent: true,
-        opacity: 0.2,
-        shininess: 100,
-        specular: 0xffffff,
-        emissive: 0x00ffff,
-        emissiveIntensity: 0.3
-      });
-      const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-      scene.add(sphere);
-
-      // 内部ワイヤー
-      const wireMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        wireframe: true,
-        transparent: true,
-        opacity: 0.3
-      });
-      const wireSphere = new THREE.Mesh(sphereGeometry, wireMaterial);
-      sphere.add(wireSphere);
-
-      // 光源
-      const light = new THREE.PointLight(0x00ffff, 2, 50);
-      light.position.set(5, 5, 5);
-      scene.add(light);
-
-      const ambientLight = new THREE.AmbientLight(0x404040);
-      scene.add(ambientLight);
-
-      // アニメーション
-      function animate() {
-        requestAnimationFrame(animate);
-        const t = Date.now() * 0.001;
-        sphere.rotation.y += 0.003;
-        wireSphere.rotation.x += 0.002;
-        wireSphere.rotation.y -= 0.002;
-
-        const hue = (t * 40) % 360;
-        const color = new THREE.Color(`hsl(${hue}, 100%, 50%)`);
-        sphereMaterial.color = color;
-        sphereMaterial.emissive = color;
-
-        renderer.render(scene, camera);
-      }
-
-      animate();
-
-      window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-      });
-    </script>
-  </body>
+    });
+  </script>
+</body>
 </html>
