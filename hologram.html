@@ -3,16 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <title>Glass Sphere with Colorful Fog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    body { margin: 0; overflow: hidden; background: black; }
+    body { margin: 0; background: black; overflow: hidden; }
     canvas { display: block; }
   </style>
 </head>
 <body>
   <script type="module">
-    // ✅ 正しいフルURLを使用
-    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
-    import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js';
+    // ✅ ローカルのThree.jsとOrbitControlsを使用
+    import * as THREE from './js/three.module.js';
+    import { OrbitControls } from './js/OrbitControls.js';
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -45,7 +46,7 @@
     const glassSphere = new THREE.Mesh(sphereGeometry, glassMaterial);
     scene.add(glassSphere);
 
-    // 内部のカラフル霧 (Points)
+    // 内部の霧（Points）
     const particleCount = 1200;
     const fogGeometry = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
@@ -73,7 +74,7 @@
     const fog = new THREE.Points(fogGeometry, fogMaterial);
     scene.add(fog);
 
-    // コントロール
+    // カメラコントロール
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
