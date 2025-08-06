@@ -10,13 +10,12 @@
   </style>
 </head>
 <body>
-  <!-- ✅ 1. Three.js を先に読み込む -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
-  <!-- ✅ 2. OrbitControls を次に読み込む -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/controls/OrbitControls.js"></script>
-  <!-- ✅ 3. メインスクリプト（Three.js 読み込み後に実行） -->
+  <!-- ✅ 古い安定版 Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.125.2/build/three.min.js"></script>
+  <!-- ✅ 古い非モジュール版 OrbitControls -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.125.2/examples/js/controls/OrbitControls.js"></script>
+
   <script>
-    // ====== Three.js コード ======
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
     camera.position.z = 5;
@@ -75,7 +74,7 @@
     const fog = new THREE.Points(fogGeometry, fogMaterial);
     scene.add(fog);
 
-    // ✅ OrbitControls は THREE. なしで
+    // ✅ 古いバージョンなのでグローバル変数 OrbitControls が使える
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
