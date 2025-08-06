@@ -1,84 +1,98 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="UTF-8" />
   <title>Glass Sphere with Colorful Fog</title>
   <style>
-    body { margin: 0; overflow: hidden; background-color: black; }
+    body { margin: 0; overflow: hidden; background: black; }
     canvas { display: block; }
   </style>
 </head>
 <body>
   <script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.160.1/build/three.module.js';
-    import { OrbitControls } from 'https://unpkg.com/three@0.160.1/examples/jsm/controls/OrbitControls.js';
+    // ✅ 正しいフルURLを使用
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+    import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js';
 
-    // シーンとカメラ
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 0, 5);
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.z = 5;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // 光源
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    // ライト
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
-    const pointLight = new THREE.PointLight(0xffffff, 1.2);
+
+    const pointLight = new THREE.PointLight(0xffffff, 1.5);
     pointLight.position.set(5, 5, 5);
     scene.add(pointLight);
 
-    // ガラスの球体
+    // ガラス球体
     const sphereGeometry = new THREE.SphereGeometry(1.5, 64, 64);
     const glassMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
-      metalness: 0.0,
+      metalness: 0,
       roughness: 0,
-      transmission: 1, // 透過
-      thickness: 0.5,
       transparent: true,
+      opacity: 0.1,
+      transmission: 1.0,
+      thickness: 0.5,
       envMapIntensity: 1
     });
     const glassSphere = new THREE.Mesh(sphereGeometry, glassMaterial);
     scene.add(glassSphere);
 
-    // カラフルな霧 (小さな粒をランダムに配置)
-    const fogGroup = new THREE.Group();
-    const fogGeometry = new THREE.SphereGeometry(0.05, 8, 8);
-    const fogMaterial = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.3 });
+    // 内部のカラフル霧 (Points)
+    const particleCount = 1200;
+    const fogGeometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
 
-    for (let i = 0; i < 300; i++) {
-      const fogParticle = new THREE.Mesh(fogGeometry, fogMaterial.clone());
-      fogParticle.position.set(
-        (Math.random() - 0.5) * 2.5,
-        (Math.random() - 0.5) * 2.5,
-        (Math.random() - 0.5) * 2.5
-      );
-      fogGroup.add(fogParticle);
+    for (let i = 0; i < particleCount; i++) {
+      const radius = Math.random() * 1.2;
+      const theta = Math.random() * 2 * Math.PI;
+      const phi = Math.acos((Math.random() * 2) - 1);
+
+      positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = radius * Math.cos(phi);
     }
 
-    scene.add(fogGroup);
+    fogGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-    // 時間で霧の色を変える
-    let clock = new THREE.Clock();
-    function animateFogColors(time) {
-      const hue = (time * 0.05) % 1;
-      const color = new THREE.Color().setHSL(hue, 1.0, 0.5);
-      fogGroup.children.forEach(p => {
-        p.material.color.copy(color);
-      });
-    }
+    const fogMaterial = new THREE.PointsMaterial({
+      size: 0.05,
+      color: 0xff00ff,
+      transparent: true,
+      opacity: 0.35,
+      depthWrite: false
+    });
+
+    const fog = new THREE.Points(fogGeometry, fogMaterial);
+    scene.add(fog);
 
     // コントロール
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
-    // レンダリングループ
+    // 色変化
+    const clock = new THREE.Clock();
+
     function animate() {
       requestAnimationFrame(animate);
       controls.update();
-      animateFogColors(clock.getElapsedTime());
+
+      const time = clock.getElapsedTime();
+      const hue = (time * 0.05) % 1;
+      const color = new THREE.Color().setHSL(hue, 1.0, 0.5);
+      fogMaterial.color.copy(color);
+      pointLight.color.copy(color);
+
+      fog.rotation.y += 0.0008;
+      glassSphere.rotation.y -= 0.0005;
+
       renderer.render(scene, camera);
     }
 
@@ -86,7 +100,7 @@
 
     // リサイズ対応
     window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
