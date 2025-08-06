@@ -10,10 +10,10 @@
   </style>
 </head>
 <body>
-  <!-- ✅ 古い安定版 Three.js -->
+  <!-- Three.js (古い安定版) -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.125.2/build/three.min.js"></script>
-  <!-- ✅ 古い非モジュール版 OrbitControls -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.125.2/examples/js/controls/OrbitControls.js"></script>
+  <!-- OrbitControls (対応バージョン) -->
+  <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r125/examples/js/controls/OrbitControls.js"></script>
 
   <script>
     const scene = new THREE.Scene();
@@ -40,7 +40,6 @@
       transparent: true,
       opacity: 0.1,
       transmission: 1.0,
-      thickness: 0.5,
       envMapIntensity: 1
     });
     const glassSphere = new THREE.Mesh(sphereGeometry, glassMaterial);
@@ -74,7 +73,7 @@
     const fog = new THREE.Points(fogGeometry, fogMaterial);
     scene.add(fog);
 
-    // ✅ 古いバージョンなのでグローバル変数 OrbitControls が使える
+    // ✅ これで OrbitControls が使える
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
