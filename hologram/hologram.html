@@ -2,19 +2,107 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>Glass Sphere with Colorful Fog</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Glass Sphere with Fog</title>
   <style>
     body { margin: 0; background: black; overflow: hidden; }
     canvas { display: block; }
   </style>
 </head>
 <body>
-  <!-- Three.js 単一ビルド -->
-  <script src="./js/three.min.js"></script>
-  <!-- 非モジュール版 OrbitControls -->
-  <script src="./js/OrbitControls.js"></script>
-  <!-- メインスクリプト -->
-  <script src="./js/main.js"></script>
+  <!-- Three.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+  <!-- OrbitControls (CDN 非モジュール版) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/examples/js/controls/OrbitControls.js"></script>
+
+  <script>
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.z = 5;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const pointLight = new THREE.PointLight(0xffffff, 1.5);
+    pointLight.position.set(5, 5, 5);
+    scene.add(pointLight);
+
+    // ガラス球体
+    const sphereGeometry = new THREE.SphereGeometry(1.5, 64, 64);
+    const glassMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff,
+      metalness: 0,
+      roughness: 0,
+      transparent: true,
+      opacity: 0.1,
+      transmission: 1.0,
+      thickness: 0.5,
+      envMapIntensity: 1
+    });
+    const glassSphere = new THREE.Mesh(sphereGeometry, glassMaterial);
+    scene.add(glassSphere);
+
+    // 霧の粒子
+    const particleCount = 1200;
+    const fogGeometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount; i++) {
+      const radius = Math.random() * 1.2;
+      const theta = Math.random() * 2 * Math.PI;
+      const phi = Math.acos((Math.random() * 2) - 1);
+
+      positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = radius * Math.cos(phi);
+    }
+
+    fogGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const fogMaterial = new THREE.PointsMaterial({
+      size: 0.05,
+      color: 0xff00ff,
+      transparent: true,
+      opacity: 0.35,
+      depthWrite: false
+    });
+
+    const fog = new THREE.Points(fogGeometry, fogMaterial);
+    scene.add(fog);
+
+    // OrbitControls
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+
+      const time = clock.getElapsedTime();
+      const hue = (time * 0.05) % 1;
+      const color = new THREE.Color().setHSL(hue, 1.0, 0.5);
+      fogMaterial.color.copy(color);
+      pointLight.color.copy(color);
+
+      fog.rotation.y += 0.0008;
+      glassSphere.rotation.y -= 0.0005;
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
 </body>
 </html>
