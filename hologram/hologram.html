@@ -10,11 +10,11 @@
   </style>
 </head>
 <body>
-  <script type="module">
-    // ✅ ローカルのThree.jsとOrbitControlsを使用
-    import * as THREE from './js/three.module.js';
-    import { OrbitControls } from './js/OrbitControls.js';
-
+  <!-- Three.js 単一ビルド -->
+  <script src="./js/three.min.js"></script>
+  <!-- OrbitControls（非モジュール版） -->
+  <script src="./js/OrbitControls.js"></script>
+  <script>
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
     camera.position.z = 5;
@@ -23,7 +23,6 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // ライト
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
 
@@ -46,7 +45,7 @@
     const glassSphere = new THREE.Mesh(sphereGeometry, glassMaterial);
     scene.add(glassSphere);
 
-    // 内部の霧（Points）
+    // 霧の粒子
     const particleCount = 1200;
     const fogGeometry = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
@@ -74,11 +73,10 @@
     const fog = new THREE.Points(fogGeometry, fogMaterial);
     scene.add(fog);
 
-    // カメラコントロール
-    const controls = new OrbitControls(camera, renderer.domElement);
+    // OrbitControls
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
-    // 色変化
     const clock = new THREE.Clock();
 
     function animate() {
@@ -99,7 +97,6 @@
 
     animate();
 
-    // リサイズ対応
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
