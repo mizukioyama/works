@@ -3,9 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Glass Sphere — Day/Night & Moon Auto (US, 24h)</title>
+<title>Glass Sphere — 24h Auto (America)</title>
 
-<!-- importmap for three -->
 <script type="importmap">
 {
   "imports": {
@@ -16,66 +15,29 @@
 }
 </script>
 
-<!-- SunCalc & Luxon (non-module globals) -->
-<script src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/luxon@3.6.0/build/global/luxon.min.js"></script>
-
 <style>
-  html,body{height:100%;margin:0;background:#05060a;color:#fff;font-family:Inter,system-ui,Segoe UI,Roboto,"Hiragino Kaku Gothic ProN","メイリオ",sans-serif}
-  #container{width:100%;height:100vh;position:relative}
-  #uiPanel{
-    position:fixed; right:12px; top:12px; width:320px; z-index:40;
-    background:rgba(0,0,0,0.45); padding:12px; border-radius:10px;
-    backdrop-filter: blur(6px); font-size:13px;
+  html,body{height:100%;margin:0;background:#05060a; color:#fff; font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;}
+  #app{width:100vw;height:100vh;overflow:hidden;position:relative}
+  #timeDisplay{
+    position:fixed;left:12px;top:12px;z-index:40;
+    background:rgba(0,0,0,0.45);padding:8px 10px;border-radius:8px;font-size:14px;
+    display:flex;gap:12px;align-items:center;
   }
-  label{display:block;margin-top:6px;font-size:12px;color:#cfd8e3}
-  select,input{width:100%;padding:6px;margin-top:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:#fff}
-  button{margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2196f3;color:#fff;cursor:pointer}
-  #info{margin-top:10px;font-size:13px;color:#e6eef8}
-  .small{font-size:12px;color:#9fb0cf}
+  #tzSelect{background:transparent;border:1px solid rgba(255,255,255,0.08);color:#fff;padding:4px 6px;border-radius:6px;}
+  #note{font-size:12px;color:#ddd;opacity:0.9}
 </style>
 </head>
 <body>
-<div id="container"></div>
-
-<div id="uiPanel">
-  <div style="font-weight:600;margin-bottom:6px">Day/Night Auto — US (24h)</div>
-
-  <label>都市プリセット（米国）</label>
-  <select id="citySelect">
-    <option value='{"name":"New York, NY","lat":40.7128,"lon":-74.0060,"tz":"America/New_York"}'>New York (America/New_York)</option>
-    <option value='{"name":"Los Angeles, CA","lat":34.0522,"lon":-118.2437,"tz":"America/Los_Angeles"}'>Los Angeles (America/Los_Angeles)</option>
-    <option value='{"name":"Chicago, IL","lat":41.8781,"lon":-87.6298,"tz":"America/Chicago"}'>Chicago (America/Chicago)</option>
-    <option value='{"name":"Denver, CO","lat":39.7392,"lon":-104.9903,"tz":"America/Denver"}'>Denver (America/Denver)</option>
-    <option value='{"name":"Anchorage, AK","lat":61.2181,"lon":-149.9003,"tz":"America/Anchorage"}'>Anchorage (America/Anchorage)</option>
-    <option value='{"name":"Honolulu, HI","lat":21.3069,"lon":-157.8583,"tz":"Pacific/Honolulu"}'>Honolulu (Pacific/Honolulu)</option>
-    <option value='{"name":"Phoenix, AZ","lat":33.4484,"lon":-112.0740,"tz":"America/Phoenix"}'>Phoenix (America/Phoenix)</option>
-  </select>
-
-  <label>緯度,経度（手入力で都市上書き）</label>
-  <input id="latInput" placeholder="lat (例: 40.7128)" type="number" step="0.0001"/>
-  <input id="lonInput" placeholder="lon (例: -74.0060)" type="number" step="0.0001"/>
-
-  <label>モード</label>
-  <select id="mode">
-    <option value="realtime">Real-time（現在時刻を反映）</option>
-    <option value="simulate">Simulate 24h</option>
-  </select>
-
-  <label>速度（Simulate 時の速さ、1 = 実時間、24 = 24倍）</label>
-  <input id="speed" type="range" min="0.1" max="240" step="0.1" value="60"/>
-
-  <div style="display:flex;gap:8px">
-    <button id="playBtn">Play</button>
-    <button id="pauseBtn">Pause</button>
-    <button id="nowBtn">Now</button>
-  </div>
-
-  <div id="info">
-    <div id="locName" class="small"></div>
-    <div id="sunTimes" class="small"></div>
-    <div id="moonTimes" class="small"></div>
-    <div id="clock" class="small" style="margin-top:6px"></div>
+<div id="app">
+  <div id="timeDisplay">
+    <div id="clock" aria-live="polite">--:--:--</div>
+    <select id="tzSelect" aria-label="Timezone">
+      <option value="America/New_York">New York (EST/EDT)</option>
+      <option value="America/Chicago">Chicago (CST/CDT)</option>
+      <option value="America/Denver">Denver (MST/MDT)</option>
+      <option value="America/Los_Angeles">Los Angeles (PST/PDT)</option>
+    </select>
+    <div id="note">24h — 0/24: soft & dull → 12: bright & clear</div>
   </div>
 </div>
 
@@ -87,9 +49,9 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import GUI from "lil-gui";
 
-// --- basics: renderer, scene, camera
-const container = document.getElementById('container');
-const renderer = new THREE.WebGLRenderer({ antialias:true });
+/* ---------------- scene / renderer ---------------- */
+const container = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -98,257 +60,245 @@ renderer.setSize(container.clientWidth, container.clientHeight);
 container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, container.clientWidth/container.clientHeight, 0.05, 100);
-camera.position.set(0,0.8,3);
+scene.background = new THREE.Color(0x05060a);
+
+const camera = new THREE.PerspectiveCamera(45, container.clientWidth/container.clientHeight, 0.05, 100);
+camera.position.set(0, 0.8, 3.1);
+
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-// --- environment (simple gradient sphere)
-const envMat = new THREE.ShaderMaterial({
-  side: THREE.BackSide,
-  uniforms: {
-    topColor: { value: new THREE.Color('#ffd7e6') },
-    bottomColor: { value: new THREE.Color('#7be7ff') }
-  },
-  vertexShader: `varying vec3 vPos; void main(){ vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-  fragmentShader: `uniform vec3 topColor; uniform vec3 bottomColor; varying vec3 vPos; void main(){ float t = (vPos.y+40.0)/80.0; vec3 c = mix(bottomColor, topColor, smoothstep(0.0,1.0,t)); gl_FragColor = vec4(c,1.0); }`
+/* --------------- environment (PMREM) ---------------- */
+const loader = new THREE.CubeTextureLoader();
+const basePath = 'https://threejs.org/examples/textures/cube/SwedishRoyalCastle/';
+const urls = [
+  basePath + 'px.jpg', basePath + 'nx.jpg',
+  basePath + 'py.jpg', basePath + 'ny.jpg',
+  basePath + 'pz.jpg', basePath + 'nz.jpg'
+];
+loader.load(urls, (cube) => {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  pmrem.compileEquirectangularShader();
+  const envMap = pmrem.fromCubemap(cube).texture;
+  scene.environment = envMap;
+  // keep background subtle: use cube as background but dim later by exposure
+  scene.background = cube;
+  pmrem.dispose();
 });
-scene.add(new THREE.Mesh(new THREE.SphereGeometry(40,32,32), envMat));
 
-// --- ground
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20), new THREE.MeshStandardMaterial({ color:0x07070a, roughness:0.5 }));
-ground.rotation.x = -Math.PI/2; ground.position.y = -1.05; scene.add(ground);
+/* ---------------- ground / contact shadow ---------------- */
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color: 0x060608, roughness: 0.48, metalness: 0.04 })
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -1.05;
+scene.add(ground);
 
-// --- realistic glass sphere (high detail)
+/* ---------------- glass sphere ---------------- */
 const sphereGeo = new THREE.SphereGeometry(1.0, 192, 192);
 const glassMat = new THREE.MeshPhysicalMaterial({
-  color:0xffffff, metalness:0, roughness:0.02, transmission:1.0, thickness:0.18, ior:1.52, clearcoat:1.0, clearcoatRoughness:0.02, envMapIntensity:1.0, side:THREE.DoubleSide
+  color: 0xffffff,
+  metalness: 0.0,
+  roughness: 0.02,
+  transmission: 1.0,
+  thickness: 0.18,
+  ior: 1.52,
+  clearcoat: 1.0,
+  clearcoatRoughness: 0.02,
+  reflectivity: 0.9,
+  envMapIntensity: 1.0,
+  side: THREE.DoubleSide
 });
-const glass = new THREE.Mesh(sphereGeo, glassMat);
-scene.add(glass);
+const glassMesh = new THREE.Mesh(sphereGeo, glassMat);
+scene.add(glassMesh);
 
-// --- internal subtle shell to hint thickness
-const inner = new THREE.Mesh(new THREE.SphereGeometry(0.88,128,128), new THREE.MeshPhysicalMaterial({ color:0xffffff, roughness:0.35, transmission:0.8, thickness:0.02, opacity:0.65, transparent:true }));
-scene.add(inner);
+/* inner thin surface to hint thickness */
+const innerMesh = new THREE.Mesh(new THREE.SphereGeometry(0.88, 128, 128), new THREE.MeshPhysicalMaterial({
+  color:0xffffff, metalness:0, roughness:0.3, transmission:0.8, thickness:0.02, transparent:true, opacity:0.6
+}));
+scene.add(innerMesh);
 
-// --- small particles for mist
-const N = 12000;
-const pos = new Float32Array(N*3);
-for(let i=0;i<N;i++){
-  const r = Math.cbrt(Math.random()) * 0.9;
+/* subtle suspended particles for depth */
+const ptCount = 12000;
+const pos = new Float32Array(ptCount*3);
+for(let i=0;i<ptCount;i++){
+  const r = Math.cbrt(Math.random())*0.9;
   const theta = Math.random()*Math.PI*2;
   const phi = Math.acos(2*Math.random()-1);
-  pos[3*i] = r * Math.sin(phi) * Math.cos(theta);
-  pos[3*i+1] = r * Math.sin(phi) * Math.sin(theta);
-  pos[3*i+2] = r * Math.cos(phi);
+  pos[3*i] = r*Math.sin(phi)*Math.cos(theta);
+  pos[3*i+1] = r*Math.sin(phi)*Math.sin(theta);
+  pos[3*i+2] = r*Math.cos(phi);
 }
 const pgeo = new THREE.BufferGeometry();
 pgeo.setAttribute('position', new THREE.BufferAttribute(pos,3));
-const pmat = new THREE.PointsMaterial({ size: 0.008, color:0xffffff, transparent:true, opacity:0.12, depthWrite:false });
-const points = new THREE.Points(pgeo, pmat);
-scene.add(points);
+const pmat = new THREE.PointsMaterial({ size:0.008, color:0xffffff, transparent:true, opacity:0.12, depthWrite:false });
+const particles = new THREE.Points(pgeo, pmat);
+scene.add(particles);
 
-// --- lights: directional for sun, ambient, moon light
-const ambient = new THREE.AmbientLight(0xffffff, 0.35);
-scene.add(ambient);
+/* lights to shape highlights */
+const key = new THREE.PointLight(0xfff6e6, 1.0, 20);
+key.position.set(4, 4, 3);
+scene.add(key);
+const fill = new THREE.PointLight(0x7fdcff, 0.6, 20);
+fill.position.set(-3, -1.5, 2.8);
+scene.add(fill);
+scene.add(new THREE.AmbientLight(0xffffff, 0.22));
 
-const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
-sunLight.castShadow = false;
-scene.add(sunLight);
-
-const moonLight = new THREE.DirectionalLight(0x9fbffb, 0.0);
-scene.add(moonLight);
-
-// --- postprocess (bloom)
+/* postprocess */
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(container.clientWidth, container.clientHeight), 0.5, 0.6, 0.85);
+const bloom = new UnrealBloomPass(new THREE.Vector2(container.clientWidth, container.clientHeight), 0.45, 0.4, 0.85);
 composer.addPass(bloom);
 
-// --- UI elements
-const citySelect = document.getElementById('citySelect');
-const latInput = document.getElementById('latInput');
-const lonInput = document.getElementById('lonInput');
-const modeSelect = document.getElementById('mode');
-const speedInput = document.getElementById('speed');
-const playBtn = document.getElementById('playBtn');
-const pauseBtn = document.getElementById('pauseBtn');
-const nowBtn = document.getElementById('nowBtn');
-const locNameEl = document.getElementById('locName');
-const sunTimesEl = document.getElementById('sunTimes');
-const moonTimesEl = document.getElementById('moonTimes');
+/* ---------------- GUI ---------------- */
+const gui = new GUI({ width: 300 });
+const params = {
+  tz: 'America/New_York',
+  minTransmission: 0.10,
+  maxTransmission: 1.00,
+  minRoughness: 0.35,
+  maxRoughness: 0.00,
+  minThickness: 0.02,
+  maxThickness: 0.22,
+  minEnv: 0.2,
+  maxEnv: 1.2,
+  bloom: 0.45,
+  manualOverride: false
+};
+const tzCtrl = gui.add(params, 'tz', {
+  "New York (EST/EDT)": "America/New_York",
+  "Chicago (CST/CDT)": "America/Chicago",
+  "Denver (MST/MDT)": "America/Denver",
+  "Los Angeles (PST/PDT)": "America/Los_Angeles"
+}).name('Timezone');
+gui.add(params, 'manualOverride').name('Manual control');
+const gGlass = gui.addFolder('Ranges');
+gGlass.add(params, 'minTransmission', 0, 1, 0.01).name('minTransmission'); 
+gGlass.add(params, 'maxTransmission', 0, 1, 0.01).name('maxTransmission');
+gGlass.add(params, 'minRoughness', 0, 1, 0.01).name('minRoughness');
+gGlass.add(params, 'maxRoughness', 0, 1, 0.01).name('maxRoughness');
+gGlass.add(params, 'minThickness', 0, 1, 0.001).name('minThickness');
+gGlass.add(params, 'maxThickness', 0, 1, 0.001).name('maxThickness');
+gGlass.add(params, 'minEnv', 0, 3, 0.01).name('minEnv');
+gGlass.add(params, 'maxEnv', 0, 3, 0.01).name('maxEnv');
+gGlass.open();
+gui.add(bloom, 'strength', 0, 2, 0.01).name('Bloom Strength');
+
+tzCtrl.onChange(v => {
+  // reflect selection in top-left select element
+  document.getElementById('tzSelect').value = v;
+});
+
+/* sync select UI */
+const tzSelect = document.getElementById('tzSelect');
+tzSelect.value = params.tz;
+tzSelect.addEventListener('change', e => {
+  params.tz = e.target.value;
+  tzCtrl.setValue(params.tz);
+});
+
+/* ---------------- time -> material mapping ---------------- */
+/*
+Mapping function:
+  t in [0,24)
+  f = 0.5*(1 - cos(pi * t/12))  -> f=0 at t=0/24, f=1 at t=12
+Then material parameters are lerped between min/max using f.
+We apply easing (smooth transition) so changes are not jerky.
+*/
+function getLocalTimeInZone(timeZone){
+  // returns fractional hours (e.g., 13.5)
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const parts = fmt.formatToParts(now);
+  // Extract h,m,s
+  let hh = 0, mm = 0, ss = 0;
+  for(const p of parts){
+    if(p.type === 'hour') hh = parseInt(p.value,10);
+    if(p.type === 'minute') mm = parseInt(p.value,10);
+    if(p.type === 'second') ss = parseInt(p.value,10);
+  }
+  return hh + mm/60 + ss/3600;
+}
+
+function timeToPhase(t){
+  // t in hours 0..24
+  // f = 0 at 0/24, 1 at 12
+  return 0.5 * (1 - Math.cos(Math.PI * t / 12));
+}
+
+let smoothState = {
+  transmission: glassMat.transmission,
+  roughness: glassMat.roughness,
+  thickness: glassMat.thickness,
+  env: glassMat.envMapIntensity,
+  bloom: bloom.strength
+};
+
+const ease = (current, target, dt, speed=3.5) => current + (target - current) * (1 - Math.exp(-speed * dt));
+
+/* ---------------- clock display ---------------- */
 const clockEl = document.getElementById('clock');
-
-let playing = false;
-let simulateSpeed = parseFloat(speedInput.value);
-let simTime = Date.now(); // ms
-let mode = modeSelect.value;
-
-// default location (NY)
-let current = JSON.parse(citySelect.value);
-
-// set lat/lon inputs to current
-latInput.value = current.lat;
-lonInput.value = current.lon;
-locNameEl.textContent = `${current.name} — timezone: ${current.tz}`;
-
-// helpers: format time in city's timezone using Luxon
-const { DateTime } = luxon;
-function fmtDate(dt) {
-  return dt.toLocaleString(DateTime.TIME_24_WITH_SECONDS);
+function updateClockDisplay(timeZone){
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-GB', { timeZone, hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' });
+  clockEl.textContent = fmt.format(now);
 }
 
-// compute Sun/Moon and update lighting based on date & lat/lon
-function updateForDate(date, lat, lon, tz){
-  // Sun
-  const sunPos = SunCalc.getPosition(date, lat, lon); // returns azimuth, altitude (radians)
-  const sunAz = sunPos.azimuth; const sunAlt = sunPos.altitude;
+/* ---------------- animation loop ---------------- */
+const clock = new THREE.Clock();
 
-  // Moon
-  const moonPos = SunCalc.getMoonPosition(date, lat, lon);
-  const moonAlt = moonPos.altitude; const moonAz = moonPos.azimuth;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
 
-  // Rise/set times
-  const times = SunCalc.getTimes(date, lat, lon);
-  const moonTimes = SunCalc.getMoonTimes(date, lat, lon, true); // returns rise/set where available
+  // get precise fractional hour in selected timezone
+  const hour = getLocalTimeInZone(params.tz);
+  updateClockDisplay(params.tz);
 
-  // Update UI times (formatted to tz)
-  const dtLocal = DateTime.fromJSDate(date).setZone(tz);
-  locNameEl.textContent = `${current.name} — ${dtLocal.toFormat("yyyy-LL-dd") } (${tz})`;
+  // compute phase
+  const phase = timeToPhase(hour); // 0..1
 
-  const sunrise = times.sunrise ? DateTime.fromJSDate(times.sunrise).setZone(tz).toFormat('HH:mm:ss') : '—';
-  const sunset  = times.sunset  ? DateTime.fromJSDate(times.sunset).setZone(tz).toFormat('HH:mm:ss') : '—';
-  sunTimesEl.textContent = `Sunrise: ${sunrise}  /  Sunset: ${sunset}`;
+  // compute target values from ranges
+  const target = {
+    transmission: params.minTransmission + (params.maxTransmission - params.minTransmission) * phase,
+    roughness: params.minRoughness + (params.maxRoughness - params.minRoughness) * (1 - phase), // invert: at phase=1 -> maxRoughness (user set), but default set maxRoughness=0 to make smooth
+    thickness: params.minThickness + (params.maxThickness - params.minThickness) * phase,
+    env: params.minEnv + (params.maxEnv - params.minEnv) * phase,
+    bloom: bloom.strength // bloom controlled by GUI directly
+  };
 
-  const mRise = (moonTimes.rise ? DateTime.fromJSDate(moonTimes.rise).setZone(tz).toFormat('HH:mm:ss') : '—');
-  const mSet  = (moonTimes.set  ? DateTime.fromJSDate(moonTimes.set).setZone(tz).toFormat('HH:mm:ss') : '—');
-  moonTimesEl.textContent = `Moonrise: ${mRise}  /  Moonset: ${mSet}`;
+  if(!params.manualOverride){
+    // smooth towards target
+    smoothState.transmission = ease(smoothState.transmission, target.transmission, dt);
+    smoothState.roughness = ease(smoothState.roughness, target.roughness, dt);
+    smoothState.thickness = ease(smoothState.thickness, target.thickness, dt);
+    smoothState.env = ease(smoothState.env, target.env, dt);
 
-  // determine if sun is above horizon
-  const sunAbove = sunAlt > 0;
-
-  // Map sun altitude [-PI/2..PI/2] -> intensity/color/ambient/exposure
-  // color temp warm at sunrise/sunset, neutral midday
-  const sunNorm = THREE.MathUtils.clamp((sunAlt / (Math.PI/2)), -1, 1); // -1..1
-  // intensity: when sun above: 0.0..1.6, when below: 0.0..0.12 (night residual)
-  const sunIntensity = sunAbove ? THREE.MathUtils.lerp(0.2, 1.6, Math.pow(Math.max(0, sunNorm), 0.8)) : 0.05;
-  // color: mix warm to cool
-  let sunColor;
-  if (sunAbove){
-    // earlier (low alt) -> warm #ffb27a, mid -> white
-    const t = THREE.MathUtils.clamp((sunAlt / 0.6), 0, 1);
-    sunColor = new THREE.Color().lerpColors(new THREE.Color(0xffb27a), new THREE.Color(0xffffff), t);
-  } else {
-    sunColor = new THREE.Color(0x222a3a); // night slight tint
+    // apply to material & postprocess
+    glassMat.transmission = smoothState.transmission;
+    glassMat.roughness = smoothState.roughness;
+    glassMat.thickness = smoothState.thickness;
+    glassMat.envMapIntensity = smoothState.env;
+    bloom.strength = params.bloom;
   }
 
-  // apply sun directional orientation: convert spherical (azimuth, altitude) to vector
-  // SunCalc.azimuth is measured from south to west? (azimuth from North?)
-  // We'll use a common conversion: x = cos(alt)*sin(az), y = sin(alt), z = cos(alt)*cos(az) and invert for THREE directional light.
-  const az = sunAz; const alt = sunAlt;
-  const x = Math.cos(alt) * Math.sin(az);
-  const y = Math.sin(alt);
-  const z = Math.cos(alt) * Math.cos(az);
-  const sunDir = new THREE.Vector3(x, y, z).multiplyScalar(-1); // point light from sky to scene
-  sunLight.position.copy(sunDir.clone().multiplyScalar(10));
-  sunLight.color.copy(sunColor);
-  sunLight.intensity = sunIntensity;
+  // subtle breathing + rotation for realism
+  const t = performance.now() * 0.00022;
+  glassMesh.rotation.y = t * 0.6;
+  innerMesh.rotation.y = -t * 0.36;
+  particles.rotation.y = t * 0.08;
 
-  // Moon handling: weaker bluish light when above horizon
-  const moonAbove = moonAlt > 0;
-  const moonIntensity = moonAbove ? THREE.MathUtils.lerp(0.02, 0.35, THREE.MathUtils.clamp(moonAlt / 0.5, 0, 1)) : 0.0;
-  const mAz = moonPos.azimuth; const mAlt = moonPos.altitude;
-  const mx = Math.cos(mAlt) * Math.sin(mAz);
-  const my = Math.sin(mAlt);
-  const mz = Math.cos(mAlt) * Math.cos(mAz);
-  moonLight.position.copy(new THREE.Vector3(mx, my, mz).multiplyScalar(-10));
-  moonLight.color.setHex(0x9fbffb);
-  moonLight.intensity = moonIntensity;
-
-  // ambient: low at night, stronger in day
-  ambient.intensity = THREE.MathUtils.lerp(0.08, 0.6, THREE.MathUtils.clamp(sunIntensity / 1.6, 0, 1));
-
-  // exposure / bloom adjustments
-  renderer.toneMappingExposure = THREE.MathUtils.lerp(0.3, 1.2, THREE.MathUtils.clamp(sunIntensity/1.6, 0, 1));
-  bloom.strength = sunAbove ? THREE.MathUtils.lerp(0.12, 0.9, THREE.MathUtils.clamp(sunIntensity/1.6, 0, 1)) : 0.4;
-
-  // environment colors (background gradient) shift: night -> bluish, day -> warm top
-  if (sunAbove){
-    envMat.uniforms.topColor.value.set('#fff6e8');
-    envMat.uniforms.bottomColor.value.set('#dff4ff');
-  } else {
-    envMat.uniforms.topColor.value.set('#051433');
-    envMat.uniforms.bottomColor.value.set('#001020');
-  }
-
-  // glass material tweak: at night increase roughness a bit, reduce env intensity
-  glassMat.roughness = sunAbove ? 0.02 : 0.08;
-  glassMat.envMapIntensity = sunAbove ? 1.0 : 0.6;
-}
-
-// --- simulation / realtime clock
-let lastTick = performance.now();
-function tick(now){
-  const dt = (now - lastTick)/1000;
-  lastTick = now;
-  if (playing){
-    if (mode === 'realtime'){
-      simTime = Date.now();
-    } else {
-      // simulate: advance simTime by dt * speed
-      simTime += dt * 1000 * simulateSpeed;
-    }
-  }
-  // Evaluate for current simTime in timezone of selected city (we just compute positions using Date(simTime))
-  const date = new Date(simTime);
-  const lat = parseFloat(latInput.value) || current.lat;
-  const lon = parseFloat(lonInput.value) || current.lon;
-  const tz = current.tz;
-  updateForDate(date, lat, lon, tz);
-
-  // update clock display in city's tz
-  const dtLocal = DateTime.fromMillis(simTime).setZone(tz);
-  clockEl.textContent = `Local time: ${dtLocal.toFormat('yyyy-LL-dd HH:mm:ss')} (${tz})`;
-
-  // animate scene objects subtly
-  const t = simTime / 1000;
-  glass.rotation.y = t * 0.02;
-  inner.rotation.y = -t * 0.016;
-  points.rotation.y = t * 0.01;
-
-  // render
+  controls.update();
   composer.render();
 
-  requestAnimationFrame(tick);
+  // update GUI displays if manualOverride toggled off/on
+  requestAnimationFrame(()=>{}); // keep loop alive
 }
 
-// --- UI events
-citySelect.addEventListener('change', ()=>{
-  current = JSON.parse(citySelect.value);
-  latInput.value = current.lat; lonInput.value = current.lon;
-  locNameEl.textContent = `${current.name} — timezone: ${current.tz}`;
-});
+animate();
 
-latInput.addEventListener('change', ()=> {
-  current = Object.assign({}, current, { lat: parseFloat(latInput.value), lon: parseFloat(lonInput.value) });
-});
-
-lonInput.addEventListener('change', ()=> {
-  current = Object.assign({}, current, { lat: parseFloat(latInput.value), lon: parseFloat(lonInput.value) });
-});
-
-modeSelect.addEventListener('change', ()=> { mode = modeSelect.value; });
-
-speedInput.addEventListener('input', ()=> { simulateSpeed = parseFloat(speedInput.value); });
-
-playBtn.addEventListener('click', ()=> { playing = true; });
-pauseBtn.addEventListener('click', ()=> { playing = false; });
-nowBtn.addEventListener('click', ()=> { simTime = Date.now(); });
-
-/* start paused, then auto-play realtime */
-playing = true; mode = 'realtime'; lastTick = performance.now(); requestAnimationFrame(tick);
-
-// --- resize handling
+/* ---------------- resize ---------------- */
 window.addEventListener('resize', ()=>{
   const w = container.clientWidth, h = container.clientHeight;
   camera.aspect = w/h; camera.updateProjectionMatrix();
