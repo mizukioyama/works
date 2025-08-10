@@ -3,9 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Glass Sphere — Gradient Mist (CDN + importmap)</title>
+<title>Realistic Glass Sphere (Three.js, CDN + importmap)</title>
 
-<!-- import map: "three" を CDN の module にマッピング -->
 <script type="importmap">
 {
   "imports": {
@@ -17,15 +16,15 @@
 </script>
 
 <style>
-  html,body{height:100%;margin:0;background:#05060a;color:#fff}
-  #container{width:100%;height:100vh;overflow:hidden}
+  html,body{height:100%;margin:0;background:#0b0b0b}
+  #app{width:100vw;height:100vh;overflow:hidden;display:block;position:relative}
+  #note{position:fixed;left:12px;top:12px;z-index:20;color:#ddd;background:rgba(0,0,0,0.35);padding:8px;border-radius:8px;font-size:13px}
 </style>
 </head>
 <body>
-<div id="container"></div>
+<div id="app"><div id="note">ドラッグで回転・ホイールでズーム — カメラ/マテリアルはGUIで調整</div></div>
 
 <script type="module">
-/* --- 重要: importmap を使うのでここでは "three" / "three/..." を使って読み込み --- */
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
@@ -33,86 +32,164 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import GUI from "lil-gui";
 
-/* --- シーン初期化（簡易版） --- */
-const container = document.getElementById('container');
-const renderer = new THREE.WebGLRenderer({antialias:true});
+const container = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
 renderer.setSize(container.clientWidth, container.clientHeight);
 container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, container.clientWidth/container.clientHeight, 0.05, 100);
-camera.position.set(0,0.45,2.8);
+scene.background = new THREE.Color(0x0b0b0b);
+
+const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.05, 100);
+camera.position.set(0, 0.8, 3.2);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
+controls.minDistance = 1.2;
+controls.maxDistance = 10;
 
-/* 背景グラデーション用の大きな球 */
-const envMat = new THREE.ShaderMaterial({
-  side: THREE.BackSide,
-  uniforms: {
-    topColor: { value: new THREE.Color('#ffd7e6') },
-    bottomColor: { value: new THREE.Color('#7be7ff') }
-  },
-  vertexShader: `varying vec3 vPos; void main(){ vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-  fragmentShader: `uniform vec3 topColor; uniform vec3 bottomColor; varying vec3 vPos; void main(){ float t = (vPos.y + 40.0)/80.0; vec3 c = mix(bottomColor, topColor, smoothstep(0.0,1.0,t)); gl_FragColor = vec4(c,1.0); }`
+// ---------- HDR-like environment using example cube (SwedishRoyalCastle)
+// 6 faces are hosted on threejs.org; using CubeTextureLoader + PMREMGenerator to create high-quality envMap
+const loader = new THREE.CubeTextureLoader();
+const basePath = 'https://threejs.org/examples/textures/cube/SwedishRoyalCastle/'; // stable example set
+const urls = [
+  basePath + 'px.jpg',
+  basePath + 'nx.jpg',
+  basePath + 'py.jpg',
+  basePath + 'ny.jpg',
+  basePath + 'pz.jpg',
+  basePath + 'nz.jpg'
+];
+
+loader.load(urls, (cubeTex) => {
+  // convert to PMREM for correct IBL
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  pmrem.compileEquirectangularShader();
+  const envMap = pmrem.fromCubemap(cubeTex).texture;
+  scene.environment = envMap; // for PBR materials
+  scene.background = cubeTex; // optional: show environment behind
+  pmrem.dispose();
 });
-scene.add(new THREE.Mesh(new THREE.SphereGeometry(40,32,32), envMat));
 
-/* ガラス球（PhysicalMaterial） */
+// ---------- subtle ground for contact/reflect
+const groundGeo = new THREE.PlaneGeometry(20, 20);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 0.45, metalness: 0.05 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -1.05;
+scene.add(ground);
+
+// ---------- glass sphere (high-poly) ----------
+const sphereGeo = new THREE.SphereGeometry(1.0, 192, 192);
+
+// Realistic physical material settings
 const glassMat = new THREE.MeshPhysicalMaterial({
-  color:0xffffff, metalness:0, roughness:0, transmission:0.95, thickness:0.25, ior:1.55, clearcoat:1.0, clearcoatRoughness:0.03, transparent:true, side:THREE.DoubleSide
+  color: 0xffffff,
+  metalness: 0.0,
+  roughness: 0.02,
+  transmission: 1.0,      // 完全透過（ガラス）
+  thickness: 0.18,        // 厚さ（屈折の見え方に影響）
+  ior: 1.52,              // ガラスっぽい屈折率
+  specularIntensity: 1.2,
+  specularColor: new THREE.Color(0xffffff),
+  clearcoat: 1.0,
+  clearcoatRoughness: 0.02,
+  reflectivity: 0.9,      // ミラー寄りの反射も出す
+  envMapIntensity: 1.0,
+  transmissionSampler: true, // three r162+ 一部環境で有効（最適化）
+  side: THREE.DoubleSide
 });
-const glassMesh = new THREE.Mesh(new THREE.SphereGeometry(1,96,96), glassMat);
+
+const glassMesh = new THREE.Mesh(sphereGeo, glassMat);
+glassMesh.position.set(0, 0, 0);
 scene.add(glassMesh);
 
-/* 簡易な霧（Points） */
-const N = 20000;
-const pos = new Float32Array(N*3);
-const col = new Float32Array(N*3);
-const ca = new THREE.Color('#ffd7e6');
-const cb = new THREE.Color('#7be7ff');
-for(let i=0;i<N;i++){
+// ---------- small inner bubble to hint thickness (optional visual) ----------
+const innerGeo = new THREE.SphereGeometry(0.88, 128, 128);
+const innerMat = new THREE.MeshPhysicalMaterial({
+  color: 0xffffff,
+  metalness: 0.0,
+  roughness: 0.38,
+  transmission: 0.85,
+  thickness: 0.02,
+  ior: 1.0,
+  transparent: true,
+  opacity: 0.6
+});
+const innerMesh = new THREE.Mesh(innerGeo, innerMat);
+scene.add(innerMesh);
+
+// ---------- subtle rim light (emissive planes) to enhance silhouette ----------
+const rimLightLeft = new THREE.PointLight(0xfff6e6, 0.6, 10);
+rimLightLeft.position.set(-3, 2, 2);
+scene.add(rimLightLeft);
+const rimLightRight = new THREE.PointLight(0x7fdcff, 0.6, 10);
+rimLightRight.position.set(3, -1.2, 2.8);
+scene.add(rimLightRight);
+
+// ---------- small decorative suspended mist (low-cost) ----------
+const particleCount = 16000;
+const pos = new Float32Array(particleCount*3);
+for(let i=0;i<particleCount;i++){
   const r = Math.cbrt(Math.random()) * 0.9;
-  const theta = Math.random()*Math.PI*2;
+  const theta = Math.random() * Math.PI * 2;
   const phi = Math.acos(2*Math.random()-1);
-  const x = r * Math.sin(phi) * Math.cos(theta);
-  const y = r * Math.sin(phi) * Math.sin(theta);
-  const z = r * Math.cos(phi);
-  pos.set([x,y,z], i*3);
-  const c = ca.clone().lerp(cb, Math.random());
-  col.set([c.r,c.g,c.b], i*3);
+  pos[3*i] = r * Math.sin(phi) * Math.cos(theta);
+  pos[3*i+1] = r * Math.sin(phi) * Math.sin(theta);
+  pos[3*i+2] = r * Math.cos(phi);
 }
-const geom = new THREE.BufferGeometry();
-geom.setAttribute('position', new THREE.BufferAttribute(pos,3));
-geom.setAttribute('color', new THREE.BufferAttribute(col,3));
-const mat = new THREE.PointsMaterial({ size:0.02, vertexColors:true, transparent:true, opacity:0.85, depthWrite:false, blending:THREE.AdditiveBlending });
-const points = new THREE.Points(geom, mat);
+const pgeo = new THREE.BufferGeometry();
+pgeo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+const pmat = new THREE.PointsMaterial({ size: 0.008, color: 0xffffff, transparent:true, opacity:0.12, depthWrite:false });
+const points = new THREE.Points(pgeo, pmat);
 scene.add(points);
 
-/* ポストプロセス (bloom) */
+// ---------- postprocess ----------
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(container.clientWidth, container.clientHeight), 0.9, 0.9, 0.0));
+const bloom = new UnrealBloomPass(new THREE.Vector2(container.clientWidth, container.clientHeight), 0.4, 0.5, 0.85);
+composer.addPass(bloom);
 
-/* アニメーション */
+// ---------- GUI ----------
+const gui = new GUI({ width: 320 });
+const gglass = gui.addFolder('Glass');
+gglass.add(glassMat, 'transmission', 0, 1, 0.01).name('transmission');
+gglass.add(glassMat, 'thickness', 0, 1, 0.001).name('thickness');
+gglass.add(glassMat, 'ior', 1.0, 2.5, 0.01).name('ior');
+gglass.add(glassMat, 'roughness', 0, 1, 0.001).name('roughness');
+gglass.add(glassMat, 'envMapIntensity', 0, 3, 0.01).name('envMapIntensity');
+gglass.open();
+
+const gscene = gui.addFolder('Scene');
+gscene.add(renderer, 'toneMappingExposure', 0.2, 2.5, 0.01).name('Exposure');
+gscene.add(bloom, 'strength', 0, 2.0, 0.01).name('Bloom');
+gscene.open();
+
+// ---------- animation ----------
 const clock = new THREE.Clock();
 function animate(){
+  requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
-  points.rotation.y = t*0.02;
-  points.rotation.x = Math.sin(t*0.1)*0.02;
+  // slight breathing for realism
+  glassMesh.rotation.y = t * 0.08;
+  innerMesh.rotation.y = -t * 0.06;
+  points.rotation.y = t * 0.02;
   controls.update();
   composer.render();
-  requestAnimationFrame(animate);
 }
 animate();
 
-/* リサイズ */
-window.addEventListener('resize', ()=>{
+// ---------- resize ----------
+window.addEventListener('resize', onResize);
+function onResize(){
   const w = container.clientWidth, h = container.clientHeight;
   camera.aspect = w/h; camera.updateProjectionMatrix();
   renderer.setSize(w,h); composer.setSize(w,h);
-});
+}
 </script>
 </body>
 </html>
