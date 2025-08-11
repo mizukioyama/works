@@ -3,22 +3,21 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Glass Sphere — Time Reactive</title>
+<title>Glass Sphere — Time-based Transparency</title>
 
-<!-- importmap -->
+<!-- Import map -->
 <script type="importmap">
 {
   "imports": {
     "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
-    "three/": "https://unpkg.com/three@0.162.0/",
-    "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.18/+esm"
+    "three/": "https://unpkg.com/three@0.162.0/"
   }
 }
 </script>
 
 <style>
-  html,body{height:100%;margin:0;background:#05060a;color:#fff}
-  #container{width:100%;height:100vh;overflow:hidden}
+  html,body { margin:0; padding:0; height:100%; background:#05060a; overflow:hidden; }
+  #container { width:100%; height:100%; }
 </style>
 </head>
 <body>
@@ -27,121 +26,113 @@
 <script type="module">
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 
+// === シーン・カメラ・レンダラー ===
 const container = document.getElementById('container');
-const renderer = new THREE.WebGLRenderer({antialias:true});
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.05, 100);
+camera.position.set(0, 0.4, 2.5);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(container.clientWidth, container.clientHeight);
+renderer.setSize(window.innerWidth, window.innerHeight);
 container.appendChild(renderer.domElement);
 
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, container.clientWidth/container.clientHeight, 0.05, 100);
-camera.position.set(0,0.45,2.8);
+// === 背景グラデーション ===
+const bgMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  uniforms: {
+    topColor: { value: new THREE.Color('#cce7ff') },
+    bottomColor: { value: new THREE.Color('#00111a') }
+  },
+  vertexShader: `
+    varying vec3 vPos;
+    void main(){
+      vPos = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 topColor;
+    uniform vec3 bottomColor;
+    varying vec3 vPos;
+    void main(){
+      float t = (vPos.y + 40.0)/80.0;
+      vec3 c = mix(bottomColor, topColor, smoothstep(0.0,1.0,t));
+      gl_FragColor = vec4(c, 1.0);
+    }
+  `
+});
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(40,32,32), bgMat));
 
+// === ガラス球 ===
+const glassMat = new THREE.MeshPhysicalMaterial({
+  color: 0xffffff,
+  metalness: 0,
+  roughness: 0.05,
+  transmission: 0.95,
+  thickness: 0.25,
+  ior: 1.52,
+  clearcoat: 1.0,
+  clearcoatRoughness: 0.03,
+  transparent: true,
+  side: THREE.DoubleSide
+});
+const glassMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 96), glassMat);
+scene.add(glassMesh);
+
+// === ライト ===
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+dirLight.position.set(5, 10, 5);
+scene.add(dirLight);
+
+// === コントロール ===
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-/* 背景グラデーション */
-const envMat = new THREE.ShaderMaterial({
-  side: THREE.BackSide,
-  uniforms: {
-    topColor: { value: new THREE.Color('#ffd7e6') },
-    bottomColor: { value: new THREE.Color('#7be7ff') }
-  },
-  vertexShader: `varying vec3 vPos; void main(){ vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-  fragmentShader: `uniform vec3 topColor; uniform vec3 bottomColor; varying vec3 vPos; void main(){ float t = (vPos.y + 40.0)/80.0; vec3 c = mix(bottomColor, topColor, smoothstep(0.0,1.0,t)); gl_FragColor = vec4(c,1.0); }`
-});
-scene.add(new THREE.Mesh(new THREE.SphereGeometry(40,32,32), envMat));
+// === 時間ベースのパラメータ更新関数 ===
+function updateGlassMaterialByTime() {
+  const now = new Date();
+  const nyHour = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric',
+    hour12: false
+  }).format(now);
+  const hour = parseInt(nyHour, 10) + now.getMinutes() / 60;
 
-/* リアルなガラス球体 */
-const glassMat = new THREE.MeshPhysicalMaterial({
-  color:0xffffff,
-  metalness:0,
-  roughness:0.05,
-  transmission:0.95,
-  thickness:0.25,
-  ior:1.55,
-  clearcoat:1.0,
-  clearcoatRoughness:0.03,
-  transparent:true,
-  side:THREE.DoubleSide
-});
-const glassMesh = new THREE.Mesh(new THREE.SphereGeometry(1,96,96), glassMat);
-scene.add(glassMesh);
+  // 0〜24h → 0〜2π
+  const t = (hour / 24) * Math.PI * 2;
 
-/* 内部の霧 */
-const N = 20000;
-const pos = new Float32Array(N*3);
-const col = new Float32Array(N*3);
-const ca = new THREE.Color('#ffd7e6');
-const cb = new THREE.Color('#7be7ff');
-for(let i=0;i<N;i++){
-  const r = Math.cbrt(Math.random()) * 0.9;
-  const theta = Math.random()*Math.PI*2;
-  const phi = Math.acos(2*Math.random()-1);
-  const x = r * Math.sin(phi) * Math.cos(theta);
-  const y = r * Math.sin(phi) * Math.sin(theta);
-  const z = r * Math.cos(phi);
-  pos.set([x,y,z], i*3);
-  const c = ca.clone().lerp(cb, Math.random());
-  col.set([c.r,c.g,c.b], i*3);
-}
-const geom = new THREE.BufferGeometry();
-geom.setAttribute('position', new THREE.BufferAttribute(pos,3));
-geom.setAttribute('color', new THREE.BufferAttribute(col,3));
-const mat = new THREE.PointsMaterial({ size:0.02, vertexColors:true, transparent:true, opacity:0.85, depthWrite:false, blending:THREE.AdditiveBlending });
-const points = new THREE.Points(geom, mat);
-scene.add(points);
+  // cos波: 0h→ぼかし強い, 12h→透明感強い
+  const transparency = 0.7 + 0.25 * Math.cos(t + Math.PI); // transmission
+  const rough = 0.2 - 0.15 * Math.cos(t + Math.PI);         // roughness
+  const coat = 0.8 + 0.2 * Math.cos(t);                     // clearcoat
+  const coatRough = 0.1 - 0.08 * Math.cos(t + Math.PI/2);   // clearcoatRoughness
 
-/* ポストプロセス */
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(container.clientWidth, container.clientHeight), 0.9, 0.9, 0.0));
+  glassMat.transmission = transparency;     // 透明度
+  glassMat.roughness = THREE.MathUtils.clamp(rough, 0, 1); // 表面のぼかし
+  glassMat.clearcoat = coat;                // 輝きの強さ
+  glassMat.clearcoatRoughness = THREE.MathUtils.clamp(coatRough, 0, 1);
 
-/* アメリカ時間（ニューヨーク）で透明感を変化させる関数 */
-function updateGlassTransparency() {
-  const nowUTC = new Date();
-  // ニューヨーク時間（UTC-4 or UTC-5）→ ここでは標準時間-5時間と仮定
-  const offsetNY = -5; 
-  const nyHour = (nowUTC.getUTCHours() + offsetNY + 24) % 24 + nowUTC.getUTCMinutes()/60;
-
-  // 0-12時: 徐々に透明感アップ, 12-24時: 徐々に透明感ダウン
-  let factor;
-  if (nyHour <= 12) {
-    factor = nyHour / 12; // 0→1
-  } else {
-    factor = (24 - nyHour) / 12; // 1→0
-  }
-  factor = Math.max(0, Math.min(1, factor)); // clamp
-
-  glassMat.transmission = 0.3 + factor * 0.7; // 0.3〜1.0
-  glassMat.roughness = 0.2 - factor * 0.15;  // 朝昼は滑らか、夜は少し粗め
-  glassMat.clearcoat = 0.7 + factor * 0.3;   // 昼は輝き増す
-  glassMat.opacity = 0.6 + factor * 0.4;     // 見た目透明度
+  // デバッグ用ログ（必要なければ消してください）
+  // console.log(`Hour: ${hour.toFixed(2)}, Transmission: ${glassMat.transmission.toFixed(2)}, Roughness: ${glassMat.roughness.toFixed(2)}`);
 }
 
-/* アニメーション */
-const clock = new THREE.Clock();
-function animate(){
-  const t = clock.getElapsedTime();
-  points.rotation.y = t*0.02;
-  points.rotation.x = Math.sin(t*0.1)*0.02;
-
-  updateGlassTransparency();
-  controls.update();
-  composer.render();
+// === アニメーション ===
+function animate() {
   requestAnimationFrame(animate);
+  controls.update();
+  updateGlassMaterialByTime();
+  renderer.render(scene, camera);
 }
 animate();
 
-/* リサイズ */
-window.addEventListener('resize', ()=>{
-  const w = container.clientWidth, h = container.clientHeight;
-  camera.aspect = w/h; camera.updateProjectionMatrix();
-  renderer.setSize(w,h); composer.setSize(w,h);
+// === リサイズ ===
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
 });
 </script>
 </body>
