@@ -1,136 +1,110 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Glass Sphere — Time-based Transparency</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>リアルガラス球体（時間変化＋HDRI反射）</title>
+<style>
+  body { margin: 0; background: black; overflow: hidden; }
+  canvas { display: block; }
+</style>
 
-<!-- Import map -->
+<!-- Import MapでThree.jsをCDNから -->
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
-    "three/": "https://unpkg.com/three@0.162.0/"
+    "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
   }
 }
 </script>
-
-<style>
-  html,body { margin:0; padding:0; height:100%; background:#05060a; overflow:hidden; }
-  #container { width:100%; height:100%; }
-</style>
 </head>
 <body>
-<div id="container"></div>
-
 <script type="module">
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 
-// === シーン・カメラ・レンダラー ===
-const container = document.getElementById('container');
+// 基本セットアップ
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.05, 100);
-camera.position.set(0, 0.4, 2.5);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 0, 4);
 
-const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
-container.appendChild(renderer.domElement);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1;
+document.body.appendChild(renderer.domElement);
 
-// === 背景グラデーション ===
-const bgMat = new THREE.ShaderMaterial({
-  side: THREE.BackSide,
-  uniforms: {
-    topColor: { value: new THREE.Color('#cce7ff') },
-    bottomColor: { value: new THREE.Color('#00111a') }
-  },
-  vertexShader: `
-    varying vec3 vPos;
-    void main(){
-      vPos = position;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform vec3 topColor;
-    uniform vec3 bottomColor;
-    varying vec3 vPos;
-    void main(){
-      float t = (vPos.y + 40.0)/80.0;
-      vec3 c = mix(bottomColor, topColor, smoothstep(0.0,1.0,t));
-      gl_FragColor = vec4(c, 1.0);
-    }
-  `
-});
-scene.add(new THREE.Mesh(new THREE.SphereGeometry(40,32,32), bgMat));
-
-// === ガラス球 ===
-const glassMat = new THREE.MeshPhysicalMaterial({
-  color: 0xffffff,
-  metalness: 0,
-  roughness: 0.05,
-  transmission: 0.95,
-  thickness: 0.25,
-  ior: 1.52,
-  clearcoat: 1.0,
-  clearcoatRoughness: 0.03,
-  transparent: true,
-  side: THREE.DoubleSide
-});
-const glassMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 96), glassMat);
-scene.add(glassMesh);
-
-// === ライト ===
-scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-dirLight.position.set(5, 10, 5);
-scene.add(dirLight);
-
-// === コントロール ===
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-// === 時間ベースのパラメータ更新関数 ===
-function updateGlassMaterialByTime() {
-  const now = new Date();
-  const nyHour = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    hour: 'numeric',
-    hour12: false
-  }).format(now);
-  const hour = parseInt(nyHour, 10) + now.getMinutes() / 60;
+// 環境光
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
-  // 0〜24h → 0〜2π
-  const t = (hour / 24) * Math.PI * 2;
+// HDRI読み込み
+new RGBELoader()
+  .setPath("https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/")
+  .load("royal_esplanade_1k.hdr", function (texture) {
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    scene.environment = texture;
+    scene.background = texture; // ←背景もHDRIにしたい場合（外したければコメントアウト）
 
-  // cos波: 0h→ぼかし強い, 12h→透明感強い
-  const transparency = 0.7 + 0.25 * Math.cos(t + Math.PI); // transmission
-  const rough = 0.2 - 0.15 * Math.cos(t + Math.PI);         // roughness
-  const coat = 0.8 + 0.2 * Math.cos(t);                     // clearcoat
-  const coatRough = 0.1 - 0.08 * Math.cos(t + Math.PI/2);   // clearcoatRoughness
+    // HDRI読み込み後にガラス球作成
+    createGlassSphere();
+  });
 
-  glassMat.transmission = transparency;     // 透明度
-  glassMat.roughness = THREE.MathUtils.clamp(rough, 0, 1); // 表面のぼかし
-  glassMat.clearcoat = coat;                // 輝きの強さ
-  glassMat.clearcoatRoughness = THREE.MathUtils.clamp(coatRough, 0, 1);
-
-  // デバッグ用ログ（必要なければ消してください）
-  // console.log(`Hour: ${hour.toFixed(2)}, Transmission: ${glassMat.transmission.toFixed(2)}, Roughness: ${glassMat.roughness.toFixed(2)}`);
+// ガラス球作成関数
+let glassMesh;
+function createGlassSphere() {
+  const glassGeo = new THREE.SphereGeometry(1, 64, 64);
+  const glassMat = new THREE.MeshPhysicalMaterial({
+    transmission: 1.0,
+    transparent: true,
+    roughness: 0.05,
+    metalness: 0,
+    ior: 1.5,
+    thickness: 0.5,
+    reflectivity: 1,
+    clearcoat: 1,
+    clearcoatRoughness: 0.05
+  });
+  glassMesh = new THREE.Mesh(glassGeo, glassMat);
+  scene.add(glassMesh);
 }
 
-// === アニメーション ===
+// 時間に応じた質感調整
+function updateGlassMaterialByTime() {
+  if (!glassMesh) return;
+
+  const now = new Date();
+  const nyTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const hour = nyTime.getHours() + nyTime.getMinutes() / 60;
+  const normalized = Math.cos((hour / 24) * Math.PI * 2); // -1〜1 → 0時最小,12時最大
+  const t = (normalized + 1) / 2; // 0〜1
+
+  const mat = glassMesh.material;
+  mat.transmission = 0.3 + t * 0.7; // 透明度 0.3〜1.0
+  mat.roughness = 0.4 - t * 0.35;   // ぼかし 0.4〜0.05
+  mat.clearcoat = 0.5 + t * 0.5;    // 輝き 0.5〜1.0
+  mat.clearcoatRoughness = 0.4 - t * 0.35; // 輝きの拡散
+  mat.needsUpdate = true;
+}
+
+// アニメーション
 function animate() {
   requestAnimationFrame(animate);
-  controls.update();
   updateGlassMaterialByTime();
+  controls.update();
   renderer.render(scene, camera);
 }
+
 animate();
 
-// === リサイズ ===
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth/window.innerHeight;
+// リサイズ対応
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
