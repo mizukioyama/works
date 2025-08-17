@@ -71,17 +71,20 @@ function createScene(){
   glassMesh = new THREE.Mesh(glassGeo, glassMat);
   scene.add(glassMesh);
 
-  // 内側の鉄球
-  const ironGeo = new THREE.SphereGeometry(0.5, 64, 64);
-  const ironMat = new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color("rgb(80,80,80)"), // 鉄っぽい
-    metalness: 1.0,
-    roughness: 0.6,
-    emissive: new THREE.Color(0x000000),
-    emissiveIntensity: 0
-  });
-  ironMesh = new THREE.Mesh(ironGeo, ironMat);
-  scene.add(ironMesh);
+// 内側の鉄球
+const ironGeo = new THREE.SphereGeometry(0.5, 64, 64);
+const ironMat = new THREE.MeshPhysicalMaterial({
+  color: new THREE.Color("rgb(50,50,50)"), // 暗い鉄っぽいベース
+  metalness: 1.0,        // 完全金属
+  roughness: 0.45,       // ややザラつき
+  reflectivity: 1.0,     // 強い反射
+  clearcoat: 0.1,        // 少しだけ表面の光沢
+  clearcoatRoughness: 0.2,
+  emissive: new THREE.Color(0x000000),
+  emissiveIntensity: 0
+});
+ironMesh = new THREE.Mesh(ironGeo, ironMat);
+scene.add(ironMesh);
 }
 
 // ----- 内側球体の熱浸透アニメーション -----
