@@ -3,13 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>リアルガラス球体（時間変化＋HDRI反射）</title>
+<title>時間経過で内部球が増えるガラス球体</title>
 <style>
   body { margin: 0; background: black; overflow: hidden; }
   canvas { display: block; }
 </style>
 
-<!-- Import MapでThree.jsをCDNから -->
 <script type="importmap">
 {
   "imports": {
@@ -43,19 +42,23 @@ controls.enableDamping = true;
 // 環境光
 scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
+// 内部の球体リスト
+let innerSpheres = [];
+let lastSpawnTime = 0;
+
 // HDRI読み込み
 new RGBELoader()
   .setPath("https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/")
   .load("royal_esplanade_1k.hdr", function (texture) {
     texture.mapping = THREE.EquirectangularReflectionMapping;
     scene.environment = texture;
-    scene.background = texture; // ←背景もHDRIにしたい場合（外したければコメントアウト）
+    scene.background = texture;
 
     // HDRI読み込み後にガラス球作成
     createGlassSphere();
   });
 
-// ガラス球作成関数
+// 外側ガラス球
 let glassMesh;
 function createGlassSphere() {
   const glassGeo = new THREE.SphereGeometry(1, 64, 64);
@@ -74,28 +77,77 @@ function createGlassSphere() {
   scene.add(glassMesh);
 }
 
-// 時間に応じた質感調整
+// 内部のカラフルな球を生成
+function spawnInnerSphere() {
+  const size = 0.1 + Math.random() * 0.3;
+  const geo = new THREE.SphereGeometry(size, 32, 32);
+
+  // 時間に応じて色を変える（グラデーション）
+  const now = new Date();
+  const hue = (now.getSeconds() * 6) % 360; // 秒で色が変わる
+  const color = new THREE.Color(`hsl(${hue}, 80%, 50%)`);
+
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: color,
+    roughness: 0.2,
+    metalness: 0.1,
+    transmission: 0.3,
+    thickness: 0.2
+  });
+
+  const mesh = new THREE.Mesh(geo, mat);
+
+  // ランダムな位置（外の球の中に収まるように）
+  const r = 0.7 * Math.random();
+  const theta = Math.random() * 2 * Math.PI;
+  const phi = Math.acos((Math.random() * 2) - 1);
+  mesh.position.set(
+    r * Math.sin(phi) * Math.cos(theta),
+    r * Math.sin(phi) * Math.sin(theta),
+    r * Math.cos(phi)
+  );
+
+  scene.add(mesh);
+  innerSpheres.push(mesh);
+}
+
+// 時間に応じたガラス質感変化
 function updateGlassMaterialByTime() {
   if (!glassMesh) return;
 
   const now = new Date();
   const nyTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
   const hour = nyTime.getHours() + nyTime.getMinutes() / 60;
-  const normalized = Math.cos((hour / 24) * Math.PI * 2); // -1〜1 → 0時最小,12時最大
-  const t = (normalized + 1) / 2; // 0〜1
+  const normalized = Math.cos((hour / 24) * Math.PI * 2);
+  const t = (normalized + 1) / 2;
 
   const mat = glassMesh.material;
-  mat.transmission = 0.3 + t * 0.7; // 透明度 0.3〜1.0
-  mat.roughness = 0.4 - t * 0.35;   // ぼかし 0.4〜0.05
-  mat.clearcoat = 0.5 + t * 0.5;    // 輝き 0.5〜1.0
-  mat.clearcoatRoughness = 0.4 - t * 0.35; // 輝きの拡散
+  mat.transmission = 0.3 + t * 0.7;
+  mat.roughness = 0.4 - t * 0.35;
+  mat.clearcoat = 0.5 + t * 0.5;
+  mat.clearcoatRoughness = 0.4 - t * 0.35;
   mat.needsUpdate = true;
 }
 
-// アニメーション
+// アニメーションループ
 function animate() {
   requestAnimationFrame(animate);
+
   updateGlassMaterialByTime();
+
+  // 一定間隔で内部球体を生成
+  const now = Date.now();
+  if (now - lastSpawnTime > 5000) { // 5秒ごとに1つ追加
+    spawnInnerSphere();
+    lastSpawnTime = now;
+  }
+
+  // ゆっくり回転させる
+  innerSpheres.forEach(s => {
+    s.rotation.y += 0.005;
+    s.rotation.x += 0.002;
+  });
+
   controls.update();
   renderer.render(scene, camera);
 }
