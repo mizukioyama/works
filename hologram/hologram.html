@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>時間経過で内部球が増えるガラス球体</title>
+<title>内側が拡大するガラス球体</title>
 <style>
   body { margin: 0; background: black; overflow: hidden; }
   canvas { display: block; }
@@ -47,14 +47,16 @@ new RGBELoader()
     texture.mapping = THREE.EquirectangularReflectionMapping;
     scene.environment = texture;
     scene.background = texture;
-    createGlassSphere();
+    createGlassSpheres();
   });
 
-// ---------------- 外側ガラス球 ----------------
-let glassMesh;
-function createGlassSphere() {
-  const geo = new THREE.SphereGeometry(1, 64, 64);
-  const mat = new THREE.MeshPhysicalMaterial({
+// ---------------- ガラス球体（外側＋内側） ----------------
+let outerSphere, innerSphere;
+let innerStartTime = Date.now();
+
+function createGlassSpheres() {
+  // ガラスマテリアル共通設定
+  const glassMat = new THREE.MeshPhysicalMaterial({
     transmission: 1,
     transparent: true,
     roughness: 0.05,
@@ -63,109 +65,38 @@ function createGlassSphere() {
     clearcoat: 1,
     clearcoatRoughness: 0.05
   });
-  glassMesh = new THREE.Mesh(geo, mat);
-  scene.add(glassMesh);
-}
 
-// ---------------- 内部球体 ----------------
-let innerSpheres = [];
-let lastSpawnTime = 0;
+  // 外側の大きなガラス球
+  const outerGeo = new THREE.SphereGeometry(1.8, 64, 64);
+  outerSphere = new THREE.Mesh(outerGeo, glassMat.clone());
+  scene.add(outerSphere);
 
-// 5秒でフレア化するスケール
-const LIFE_SPAN = 5000; // 5秒
-
-function spawnInnerSphere() {
-  const size = 0.1 + Math.random() * 0.2;
-  const geo = new THREE.SphereGeometry(size, 32, 32);
-
-  const hue = Math.random() * 360;
-  const color = new THREE.Color(`hsl(${hue}, 80%, 50%)`);
-
-  const mat = new THREE.MeshPhysicalMaterial({
-    color: color,
-    roughness: 0.3,
-    metalness: 0,
-    transmission: 0.4,
-    thickness: 0.1,
-    emissive: new THREE.Color(color),
-    emissiveIntensity: 0
-  });
-
-  const mesh = new THREE.Mesh(geo, mat);
-
-  // 球体内部にランダム配置
-  const r = 0.7 * Math.random();
-  const theta = Math.random() * 2 * Math.PI;
-  const phi = Math.acos((Math.random() * 2) - 1);
-  mesh.position.set(
-    r * Math.sin(phi) * Math.cos(theta),
-    r * Math.sin(phi) * Math.sin(theta),
-    r * Math.cos(phi)
-  );
-
-  scene.add(mesh);
-
-  innerSpheres.push({
-    mesh,
-    createdAt: Date.now()
-  });
-}
-
-// ---------------- ガラス球体の時間変化 ----------------
-function updateGlassMaterialByTime() {
-  if (!glassMesh) return;
-  const now = new Date();
-  const nyTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
-  const hour = nyTime.getHours() + nyTime.getMinutes() / 60;
-  const normalized = Math.cos((hour / 24) * Math.PI * 2);
-  const t = (normalized + 1) / 2;
-
-  const mat = glassMesh.material;
-  mat.transmission = 0.3 + t * 0.7;
-  mat.roughness = 0.4 - t * 0.35;
-  mat.clearcoat = 0.5 + t * 0.5;
-  mat.clearcoatRoughness = 0.4 - t * 0.35;
-  mat.needsUpdate = true;
-}
-
-// ---------------- 内部球体の「成長」 ----------------
-function updateInnerSpheres() {
-  const now = Date.now();
-  innerSpheres.forEach(obj => {
-    const age = now - obj.createdAt;
-    const lifeRatio = Math.min(age / LIFE_SPAN, 1); // 0〜1で5秒成長
-
-    obj.mesh.material.emissiveIntensity = lifeRatio * 5.0; // 徐々に強く発光
-    obj.mesh.material.transmission = 0.4 - lifeRatio * 0.3; // 徐々に不透明
-    obj.mesh.scale.setScalar(1 + lifeRatio * 2); // 膨張
-
-    // 5秒経った後はフレア状態で揺らぐ
-    if (lifeRatio >= 1) {
-      obj.mesh.material.emissiveIntensity = 6 + Math.sin(now * 0.01) * 2;
-      obj.mesh.scale.setScalar(3 + Math.sin(now * 0.005) * 0.3);
-    }
-  });
+  // 内側のガラス球（最小サイズでスタート）
+  const innerGeo = new THREE.SphereGeometry(0.5, 64, 64);
+  innerSphere = new THREE.Mesh(innerGeo, glassMat.clone());
+  scene.add(innerSphere);
 }
 
 // ---------------- アニメーション ----------------
 function animate() {
   requestAnimationFrame(animate);
 
-  updateGlassMaterialByTime();
+  if (innerSphere) {
+    const elapsed = (Date.now() - innerStartTime) / 1000; // 秒単位
+    const cycle = 5; // 5秒で最小→最大に到達
+    const t = Math.min(elapsed / cycle, 1);
 
-  // 1秒ごとに内部球体を追加
-  const now = Date.now();
-  if (now - lastSpawnTime > 1000) { // 1秒間隔
-    spawnInnerSphere();
-    lastSpawnTime = now;
+    // 50px → 150px に相当するスケール変化（半径0.5〜1.5に換算）
+    const minSize = 0.5;
+    const maxSize = 1.5;
+    const currentSize = minSize + (maxSize - minSize) * t;
+
+    innerSphere.scale.setScalar(currentSize / 0.5); // 初期サイズが0.5なので補正
   }
-
-  updateInnerSpheres();
 
   controls.update();
   renderer.render(scene, camera);
 }
-
 animate();
 
 window.addEventListener("resize", () => {
@@ -174,6 +105,5 @@ window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 </script>
-
 </body>
 </html>
