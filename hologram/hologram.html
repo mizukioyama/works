@@ -71,8 +71,8 @@ function createGlassSphere() {
 let innerSpheres = [];
 let lastSpawnTime = 0;
 
-// 時間スケール設定（ここで「1年 = 60秒」などにできる）
-const YEAR_MS = 1000 * 60; // 1分 = 1年相当
+// 5秒でフレア化するスケール
+const LIFE_SPAN = 5000; // 5秒
 
 function spawnInnerSphere() {
   const size = 0.1 + Math.random() * 0.2;
@@ -88,7 +88,7 @@ function spawnInnerSphere() {
     transmission: 0.4,
     thickness: 0.1,
     emissive: new THREE.Color(color),
-    emissiveIntensity: 0 // 最初は暗い
+    emissiveIntensity: 0
   });
 
   const mesh = new THREE.Mesh(geo, mat);
@@ -132,17 +132,17 @@ function updateGlassMaterialByTime() {
 function updateInnerSpheres() {
   const now = Date.now();
   innerSpheres.forEach(obj => {
-    const age = now - obj.createdAt; // ms
-    const lifeRatio = Math.min(age / YEAR_MS, 1); // 0〜1（1年でフル発光）
+    const age = now - obj.createdAt;
+    const lifeRatio = Math.min(age / LIFE_SPAN, 1); // 0〜1で5秒成長
 
-    obj.mesh.material.emissiveIntensity = lifeRatio * 3.0; // 強く光る
+    obj.mesh.material.emissiveIntensity = lifeRatio * 5.0; // 徐々に強く発光
     obj.mesh.material.transmission = 0.4 - lifeRatio * 0.3; // 徐々に不透明
-    obj.mesh.scale.setScalar(1 + lifeRatio * 2); // 大きく膨張
+    obj.mesh.scale.setScalar(1 + lifeRatio * 2); // 膨張
 
-    // 球体の外へ広がっていく「フレア」感
+    // 5秒経った後はフレア状態で揺らぐ
     if (lifeRatio >= 1) {
-      obj.mesh.material.emissiveIntensity = 5;
-      obj.mesh.scale.setScalar(3 + Math.sin(now * 0.005) * 0.3); // ゆらぎ
+      obj.mesh.material.emissiveIntensity = 6 + Math.sin(now * 0.01) * 2;
+      obj.mesh.scale.setScalar(3 + Math.sin(now * 0.005) * 0.3);
     }
   });
 }
@@ -153,9 +153,9 @@ function animate() {
 
   updateGlassMaterialByTime();
 
-  // 一定間隔で内部球体を生成
+  // 1秒ごとに内部球体を追加
   const now = Date.now();
-  if (now - lastSpawnTime > 5000) { // 5秒ごとに追加
+  if (now - lastSpawnTime > 1000) { // 1秒間隔
     spawnInnerSphere();
     lastSpawnTime = now;
   }
