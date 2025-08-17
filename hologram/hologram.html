@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>内側が拡大するガラス球体</title>
+<title>内側の球体がフレア化する</title>
 <style>
   body { margin: 0; background: black; overflow: hidden; }
   canvas { display: block; }
@@ -55,7 +55,7 @@ let outerSphere, innerSphere;
 let innerStartTime = Date.now();
 
 function createGlassSpheres() {
-  // ガラスマテリアル共通設定
+  // 共通ガラスマテリアル
   const glassMat = new THREE.MeshPhysicalMaterial({
     transmission: 1,
     transparent: true,
@@ -66,14 +66,23 @@ function createGlassSpheres() {
     clearcoatRoughness: 0.05
   });
 
-  // 外側の大きなガラス球
+  // 外側（固定）
   const outerGeo = new THREE.SphereGeometry(1.8, 64, 64);
   outerSphere = new THREE.Mesh(outerGeo, glassMat.clone());
   scene.add(outerSphere);
 
-  // 内側のガラス球（最小サイズでスタート）
+  // 内側（成長＆発光）
   const innerGeo = new THREE.SphereGeometry(0.5, 64, 64);
-  innerSphere = new THREE.Mesh(innerGeo, glassMat.clone());
+  const innerMat = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color("hsl(200, 80%, 60%)"), // 青系ベース
+    roughness: 0.2,
+    metalness: 0,
+    transmission: 0.6,
+    thickness: 0.2,
+    emissive: new THREE.Color("hsl(200, 100%, 50%)"),
+    emissiveIntensity: 0 // 最初は光っていない
+  });
+  innerSphere = new THREE.Mesh(innerGeo, innerMat);
   scene.add(innerSphere);
 }
 
@@ -82,16 +91,26 @@ function animate() {
   requestAnimationFrame(animate);
 
   if (innerSphere) {
-    const elapsed = (Date.now() - innerStartTime) / 1000; // 秒単位
-    const cycle = 5; // 5秒で最小→最大に到達
+    const elapsed = (Date.now() - innerStartTime) / 1000; // 経過秒
+    const cycle = 5; // 5秒でフレア化
     const t = Math.min(elapsed / cycle, 1);
 
-    // 50px → 150px に相当するスケール変化（半径0.5〜1.5に換算）
+    // サイズ変化（0.5 → 1.5）
     const minSize = 0.5;
     const maxSize = 1.5;
     const currentSize = minSize + (maxSize - minSize) * t;
+    innerSphere.scale.setScalar(currentSize / 0.5);
 
-    innerSphere.scale.setScalar(currentSize / 0.5); // 初期サイズが0.5なので補正
+    // 色の濃さ（1秒ごとに強調 → 5秒で最大）
+    innerSphere.material.color.offsetHSL(0, 0, -0.002); // 徐々に濃くする
+    innerSphere.material.emissiveIntensity = t * 2.0;   // 光り始める
+
+    // 5秒後はフレア状態（強発光＆揺らぎ）
+    if (t >= 1) {
+      const pulse = Math.sin(Date.now() * 0.01) * 0.5 + 1;
+      innerSphere.material.emissiveIntensity = 4 + pulse * 2;
+      innerSphere.scale.setScalar(3 + Math.sin(Date.now() * 0.005) * 0.2);
+    }
   }
 
   controls.update();
@@ -99,6 +118,7 @@ function animate() {
 }
 animate();
 
+// ---------------- リサイズ対応 ----------------
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
