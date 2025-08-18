@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ガラス球体＋赤熱化する鉄球</title>
+<title>ガラス球体＋赤熱化する鉄球＋ぼかし変化</title>
 <style>
   body { margin: 0; background: black; overflow: hidden; }
   canvas { display: block; }
@@ -63,7 +63,7 @@ function createGlassSphere() {
   const mat = new THREE.MeshPhysicalMaterial({
     transmission: 1.0,
     transparent: true,
-    roughness: 0.05,
+    roughness: 0.4, // スタートは曇り
     metalness: 0,
     ior: 1.5,
     thickness: 0.5,
@@ -81,7 +81,7 @@ let startTime = Date.now();
 function createIronSphere() {
   const geo = new THREE.SphereGeometry(0.3, 64, 64);
   const mat = new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color(0.2, 0.2, 0.2), // 暗い鉄色スタート
+    color: new THREE.Color(0.2, 0.2, 0.2),
     metalness: 1.0,
     roughness: 0.4,
     emissive: new THREE.Color(0, 0, 0),
@@ -91,54 +91,34 @@ function createIronSphere() {
   scene.add(ironMesh);
 }
 
-// ガラス質感を時間で変化
-function updateGlassMaterialByTime() {
-  if (!glassMesh) return;
-  const now = new Date();
-  const nyTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
-  const hour = nyTime.getHours() + nyTime.getMinutes() / 60;
-  const normalized = Math.cos((hour / 24) * Math.PI * 2);
-  const t = (normalized + 1) / 2;
-
-  const mat = glassMesh.material;
-  mat.transmission = 0.3 + t * 0.7;
-  mat.roughness = 0.4 - t * 0.35;
-  mat.clearcoat = 0.5 + t * 0.5;
-  mat.clearcoatRoughness = 0.4 - t * 0.35;
-  mat.needsUpdate = true;
-}
-
-// 鉄球を赤熱化させる
+// 鉄球を赤熱化させ、同時にガラスぼかしを消す
 function updateIronSphere() {
-  if (!ironMesh) return;
+  if (!ironMesh || !glassMesh) return;
+
   const elapsed = (Date.now() - startTime) / 1000; // 秒
   const progress = Math.min(elapsed / 60, 1.0); // 60秒で最大
 
-  // 黒鉄 → 赤 → オレンジ → 黄白 への補間
+  // 鉄球の色変化
   const color = new THREE.Color();
   if (progress < 0.5) {
-    // 0〜30秒: 黒〜赤
     color.lerpColors(new THREE.Color(0.2, 0.2, 0.2), new THREE.Color(1, 0, 0), progress * 2);
   } else {
-    // 30〜60秒: 赤〜黄白
     color.lerpColors(new THREE.Color(1, 0, 0), new THREE.Color(1, 0.8, 0.4), (progress - 0.5) * 2);
   }
-
   ironMesh.material.color.copy(color);
-
-  // 発光も追加（赤熱の輝き）
   ironMesh.material.emissive.copy(color);
   ironMesh.material.emissiveIntensity = progress * 2.0;
   ironMesh.material.needsUpdate = true;
+
+  // ガラスのぼかしを 0.4 → 0 に補間
+  glassMesh.material.roughness = 0.4 * (1 - progress);
+  glassMesh.material.needsUpdate = true;
 }
 
 // アニメーション
 function animate() {
   requestAnimationFrame(animate);
-
-  updateGlassMaterialByTime();
   updateIronSphere();
-
   controls.update();
   renderer.render(scene, camera);
 }
