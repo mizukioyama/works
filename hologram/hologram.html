@@ -94,8 +94,7 @@ function createIronSphere() {
   scene.add(ironMesh);
 }
 
-
-// 鉄球のカラー変化（2〜3色グラデーション）
+// 鉄球のカラー変化（2〜3色、10秒ごとに1色変化）
 function updateIronSphere() {
   if (!ironMesh || !glassMesh) return;
 
@@ -109,12 +108,12 @@ function updateIronSphere() {
     new THREE.Color(1, 1, 0)    // 黄色
   ];
 
-  // 経過時間で色を補間
-  const speed = 0.1; // 数字を大きくすると色変化が早くなる
-  const t = (elapsed * speed) % colors.length;
+  // 10秒ごとに色が切り替わる
+  const cycleTime = 10.0;
+  const t = (elapsed % (colors.length * cycleTime)) / cycleTime;
   const i1 = Math.floor(t);
   const i2 = (i1 + 1) % colors.length;
-  const blend = t - i1;
+  const blend = t - i1; // 0～1の間で補間
 
   const color = new THREE.Color().lerpColors(colors[i1], colors[i2], blend);
 
@@ -130,6 +129,10 @@ function updateIronSphere() {
   mat.transmission = 0.5 + 0.5 * progress;
   mat.clearcoatRoughness = 0.3 * (1 - progress);
   mat.needsUpdate = true;
+
+  // ===== 鉄球をゆっくり回転 =====
+  ironMesh.rotation.y += 0.002; // Y軸回転
+  ironMesh.rotation.x += 0.001; // 少しXも回転で立体感
 }
 
 
