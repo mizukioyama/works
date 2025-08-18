@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ガラス球体＋赤熱化する鉄球＋ぼかし変化</title>
+<title>赤熱化する鉄球＋クリアになるガラス球</title>
 <style>
   body { margin: 0; background: black; overflow: hidden; }
   canvas { display: block; }
@@ -61,15 +61,15 @@ let glassMesh;
 function createGlassSphere() {
   const geo = new THREE.SphereGeometry(1, 64, 64);
   const mat = new THREE.MeshPhysicalMaterial({
-    transmission: 1.0,
+    transmission: 0.5,   // スタートは曇り気味
     transparent: true,
-    roughness: 0.4, // スタートは曇り
+    roughness: 0.5,
     metalness: 0,
     ior: 1.5,
     thickness: 0.5,
     reflectivity: 1,
     clearcoat: 1,
-    clearcoatRoughness: 0.05
+    clearcoatRoughness: 0.3 // スタート時はクリアコートも曇り気味
   });
   glassMesh = new THREE.Mesh(geo, mat);
   scene.add(glassMesh);
@@ -91,7 +91,7 @@ function createIronSphere() {
   scene.add(ironMesh);
 }
 
-// 鉄球を赤熱化させ、同時にガラスぼかしを消す
+// 鉄球を赤熱化させ、同時にガラスをクリアにする
 function updateIronSphere() {
   if (!ironMesh || !glassMesh) return;
 
@@ -110,9 +110,12 @@ function updateIronSphere() {
   ironMesh.material.emissiveIntensity = progress * 2.0;
   ironMesh.material.needsUpdate = true;
 
-  // ガラスのぼかしを 0.4 → 0 に補間
-  glassMesh.material.roughness = 0.4 * (1 - progress);
-  glassMesh.material.needsUpdate = true;
+  // ガラスのぼかし → 0、透明度 → 1 に補間
+  const mat = glassMesh.material;
+  mat.roughness = 0.5 * (1 - progress);         // roughness: 0.5 → 0
+  mat.transmission = 0.5 + 0.5 * progress;      // transmission: 0.5 → 1
+  mat.clearcoatRoughness = 0.3 * (1 - progress); // clearcoatRoughness: 0.3 → 0
+  mat.needsUpdate = true;
 }
 
 // アニメーション
