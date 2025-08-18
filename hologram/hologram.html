@@ -81,44 +81,40 @@ let startTime = Date.now();
 function createIronSphere() {
   const geo = new THREE.SphereGeometry(0.3, 64, 64);
   const mat = new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color(0.15, 0.15, 0.15), // ほぼ黒鉄スタート
+    color: new THREE.Color(0.15, 0.15, 0.15),
     metalness: 1.0,      // 金属感最大
-    roughness: 0.15,     // 表面を滑らかに
-    reflectivity: 1.0,   // 反射強め
+    roughness: 0.15,     // 鏡面に近い
+    reflectivity: 1.0,
     emissive: new THREE.Color(0, 0, 0),
     emissiveIntensity: 0,
-    clearcoat: 1.0,        // 表面に光沢の膜
+    clearcoat: 1.0,
     clearcoatRoughness: 0.05
   });
   ironMesh = new THREE.Mesh(geo, mat);
   scene.add(ironMesh);
 }
 
-
-// 鉄球を赤熱化させ、同時にガラスをクリアにする
+// 鉄球のカラー変化（グラデーション）
 function updateIronSphere() {
   if (!ironMesh || !glassMesh) return;
 
   const elapsed = (Date.now() - startTime) / 1000; // 秒
-  const progress = Math.min(elapsed / 60, 1.0); // 60秒で最大
+  const progress = Math.min(elapsed / 60, 1.0); // 60秒の進行度（ガラス用）
 
-  // 鉄球の色変化
-  const color = new THREE.Color();
-  if (progress < 0.5) {
-    color.lerpColors(new THREE.Color(0.2, 0.2, 0.2), new THREE.Color(1, 0, 0), progress * 2);
-  } else {
-    color.lerpColors(new THREE.Color(1, 0, 0), new THREE.Color(1, 0.8, 0.4), (progress - 0.5) * 2);
-  }
+  // ===== 鉄球の色を時間で循環させる =====
+  const hue = (elapsed * 0.05) % 1.0; // 20秒で1周くらいのペース
+  const color = new THREE.Color().setHSL(hue, 1.0, 0.5);
+
   ironMesh.material.color.copy(color);
   ironMesh.material.emissive.copy(color);
-  ironMesh.material.emissiveIntensity = progress * 2.0;
+  ironMesh.material.emissiveIntensity = 1.5; // 常時光る感じに
   ironMesh.material.needsUpdate = true;
 
-  // ガラスのぼかし → 0、透明度 → 1 に補間
+  // ===== ガラスの透明化（前回の処理） =====
   const mat = glassMesh.material;
-  mat.roughness = 0.5 * (1 - progress);         // roughness: 0.5 → 0
-  mat.transmission = 0.5 + 0.5 * progress;      // transmission: 0.5 → 1
-  mat.clearcoatRoughness = 0.3 * (1 - progress); // clearcoatRoughness: 0.3 → 0
+  mat.roughness = 0.5 * (1 - progress);
+  mat.transmission = 0.5 + 0.5 * progress;
+  mat.clearcoatRoughness = 0.3 * (1 - progress);
   mat.needsUpdate = true;
 }
 
