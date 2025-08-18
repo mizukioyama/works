@@ -94,29 +94,44 @@ function createIronSphere() {
   scene.add(ironMesh);
 }
 
-// 鉄球のカラー変化（グラデーション）
+
+// 鉄球のカラー変化（2〜3色グラデーション）
 function updateIronSphere() {
   if (!ironMesh || !glassMesh) return;
 
   const elapsed = (Date.now() - startTime) / 1000; // 秒
-  const progress = Math.min(elapsed / 60, 1.0); // 60秒の進行度（ガラス用）
+  const progress = Math.min(elapsed / 60, 1.0); // 60秒でガラス変化
 
-  // ===== 鉄球の色を時間で循環させる =====
-  const hue = (elapsed * 0.05) % 1.0; // 20秒で1周くらいのペース
-  const color = new THREE.Color().setHSL(hue, 1.0, 0.5);
+  // ===== グラデーション用カラー配列 =====
+  const colors = [
+    new THREE.Color(1, 0, 0),   // 赤
+    new THREE.Color(1, 0.5, 0), // オレンジ
+    new THREE.Color(1, 1, 0)    // 黄色
+  ];
 
+  // 経過時間で色を補間
+  const speed = 0.1; // 数字を大きくすると色変化が早くなる
+  const t = (elapsed * speed) % colors.length;
+  const i1 = Math.floor(t);
+  const i2 = (i1 + 1) % colors.length;
+  const blend = t - i1;
+
+  const color = new THREE.Color().lerpColors(colors[i1], colors[i2], blend);
+
+  // マテリアルに適用（メタリック感維持）
   ironMesh.material.color.copy(color);
   ironMesh.material.emissive.copy(color);
-  ironMesh.material.emissiveIntensity = 1.5; // 常時光る感じに
+  ironMesh.material.emissiveIntensity = 1.5;
   ironMesh.material.needsUpdate = true;
 
-  // ===== ガラスの透明化（前回の処理） =====
+  // ===== ガラスの透明化 =====
   const mat = glassMesh.material;
   mat.roughness = 0.5 * (1 - progress);
   mat.transmission = 0.5 + 0.5 * progress;
   mat.clearcoatRoughness = 0.3 * (1 - progress);
   mat.needsUpdate = true;
 }
+
 
 // アニメーション
 function animate() {
