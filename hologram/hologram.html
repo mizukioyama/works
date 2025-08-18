@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ガラス球＋鉄球フレア</title>
+<title>ガラス球体＋赤熱化する鉄球</title>
 <style>
   body { margin: 0; background: black; overflow: hidden; }
   canvas { display: block; }
@@ -27,20 +27,22 @@ import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 // 基本セットアップ
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(0, 0, 5);
+camera.position.set(0, 0, 4);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.2;
+renderer.toneMappingExposure = 1;
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-// 環境光
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+const pointLight = new THREE.PointLight(0xffffff, 1, 10);
+pointLight.position.set(3, 3, 3);
+scene.add(pointLight);
 
 // HDRI読み込み
 new RGBELoader()
@@ -48,6 +50,8 @@ new RGBELoader()
   .load("royal_esplanade_1k.hdr", function (texture) {
     texture.mapping = THREE.EquirectangularReflectionMapping;
     scene.environment = texture;
+    scene.background = texture;
+
     createGlassSphere();
     createIronSphere();
   });
@@ -55,8 +59,8 @@ new RGBELoader()
 // 外側ガラス球
 let glassMesh;
 function createGlassSphere() {
-  const glassGeo = new THREE.SphereGeometry(1.5, 64, 64);
-  const glassMat = new THREE.MeshPhysicalMaterial({
+  const geo = new THREE.SphereGeometry(1, 64, 64);
+  const mat = new THREE.MeshPhysicalMaterial({
     transmission: 1.0,
     transparent: true,
     roughness: 0.05,
@@ -67,55 +71,73 @@ function createGlassSphere() {
     clearcoat: 1,
     clearcoatRoughness: 0.05
   });
-  glassMesh = new THREE.Mesh(glassGeo, glassMat);
+  glassMesh = new THREE.Mesh(geo, mat);
   scene.add(glassMesh);
 }
 
-// 内部鉄球＋フレア用球
-let ironMesh, flareMesh;
-let spawnTime = Date.now();
-
+// 中心の鉄球
+let ironMesh;
+let startTime = Date.now();
 function createIronSphere() {
-  // 鉄球
-  const ironGeo = new THREE.SphereGeometry(0.5, 64, 64);
-  const ironMat = new THREE.MeshPhysicalMaterial({
-    color: 0x555555,
+  const geo = new THREE.SphereGeometry(0.3, 64, 64);
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.2, 0.2, 0.2), // 暗い鉄色スタート
     metalness: 1.0,
-    roughness: 0.6,
-    emissive: new THREE.Color(0x000000),
+    roughness: 0.4,
+    emissive: new THREE.Color(0, 0, 0),
     emissiveIntensity: 0
   });
-  ironMesh = new THREE.Mesh(ironGeo, ironMat);
+  ironMesh = new THREE.Mesh(geo, mat);
   scene.add(ironMesh);
+}
 
-  // フレア（外側の発光シェル）
-  const flareGeo = new THREE.SphereGeometry(0.8, 64, 64);
-  const flareMat = new THREE.MeshBasicMaterial({
-    color: 0xff6600,
-    transparent: true,
-    opacity: 0,
-    blending: THREE.AdditiveBlending
-  });
-  flareMesh = new THREE.Mesh(flareGeo, flareMat);
-  scene.add(flareMesh);
+// ガラス質感を時間で変化
+function updateGlassMaterialByTime() {
+  if (!glassMesh) return;
+  const now = new Date();
+  const nyTime = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const hour = nyTime.getHours() + nyTime.getMinutes() / 60;
+  const normalized = Math.cos((hour / 24) * Math.PI * 2);
+  const t = (normalized + 1) / 2;
+
+  const mat = glassMesh.material;
+  mat.transmission = 0.3 + t * 0.7;
+  mat.roughness = 0.4 - t * 0.35;
+  mat.clearcoat = 0.5 + t * 0.5;
+  mat.clearcoatRoughness = 0.4 - t * 0.35;
+  mat.needsUpdate = true;
+}
+
+// 鉄球を赤熱化させる
+function updateIronSphere() {
+  if (!ironMesh) return;
+  const elapsed = (Date.now() - startTime) / 1000; // 秒
+  const progress = Math.min(elapsed / 60, 1.0); // 60秒で最大
+
+  // 黒鉄 → 赤 → オレンジ → 黄白 への補間
+  const color = new THREE.Color();
+  if (progress < 0.5) {
+    // 0〜30秒: 黒〜赤
+    color.lerpColors(new THREE.Color(0.2, 0.2, 0.2), new THREE.Color(1, 0, 0), progress * 2);
+  } else {
+    // 30〜60秒: 赤〜黄白
+    color.lerpColors(new THREE.Color(1, 0, 0), new THREE.Color(1, 0.8, 0.4), (progress - 0.5) * 2);
+  }
+
+  ironMesh.material.color.copy(color);
+
+  // 発光も追加（赤熱の輝き）
+  ironMesh.material.emissive.copy(color);
+  ironMesh.material.emissiveIntensity = progress * 2.0;
+  ironMesh.material.needsUpdate = true;
 }
 
 // アニメーション
 function animate() {
   requestAnimationFrame(animate);
 
-  const elapsed = (Date.now() - spawnTime) / 1000; // 秒
-
-  if (ironMesh && flareMesh) {
-    // 鉄球の加熱（0〜5秒で発光最大）
-    const t = Math.min(elapsed / 5, 1); // 0〜1
-    ironMesh.material.emissive.setHSL(0.05 + 0.1 * t, 1, 0.3 + 0.4 * t);
-    ironMesh.material.emissiveIntensity = t * 5;
-
-    // フレアの広がり
-    flareMesh.scale.setScalar(1 + t * 2);
-    flareMesh.material.opacity = t * 0.7;
-  }
+  updateGlassMaterialByTime();
+  updateIronSphere();
 
   controls.update();
   renderer.render(scene, camera);
@@ -123,7 +145,7 @@ function animate() {
 
 animate();
 
-// リサイズ対応
+// リサイズ
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
