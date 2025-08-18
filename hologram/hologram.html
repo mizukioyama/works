@@ -81,15 +81,19 @@ let startTime = Date.now();
 function createIronSphere() {
   const geo = new THREE.SphereGeometry(0.3, 64, 64);
   const mat = new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color(0.2, 0.2, 0.2),
-    metalness: 1.0,
-    roughness: 0.4,
+    color: new THREE.Color(0.15, 0.15, 0.15), // ほぼ黒鉄スタート
+    metalness: 1.0,      // 金属感最大
+    roughness: 0.15,     // 表面を滑らかに
+    reflectivity: 1.0,   // 反射強め
     emissive: new THREE.Color(0, 0, 0),
-    emissiveIntensity: 0
+    emissiveIntensity: 0,
+    clearcoat: 1.0,        // 表面に光沢の膜
+    clearcoatRoughness: 0.05
   });
   ironMesh = new THREE.Mesh(geo, mat);
   scene.add(ironMesh);
 }
+
 
 // 鉄球を赤熱化させ、同時にガラスをクリアにする
 function updateIronSphere() {
