@@ -75,53 +75,74 @@ function createGlassSphere() {
   scene.add(glassMesh);
 }
 
-// 中心の鉄球
+// 鉄球のグラデーション用 ShaderMaterial
 let ironMesh;
 let startTime = Date.now();
+
 function createIronSphere() {
-  const geo = new THREE.SphereGeometry(0.3, 64, 64);
-  const mat = new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color(0.15, 0.15, 0.15),
-    metalness: 1.0,      // 金属感最大
-    roughness: 0.15,     // 鏡面に近い
-    reflectivity: 1.0,
-    emissive: new THREE.Color(0, 0, 0),
-    emissiveIntensity: 0,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.05
+  const geo = new THREE.SphereGeometry(0.3, 128, 128);
+
+  const uniforms = {
+    color1: { value: new THREE.Color(1, 0, 0) }, // 初期 赤
+    color2: { value: new THREE.Color(1, 1, 1) }, // 初期 白
+    mixAmount: { value: 0.0 },
+    time: { value: 0.0 }
+  };
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: uniforms,
+    vertexShader: `
+      varying vec3 vPos;
+      void main() {
+        vPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color1;
+      uniform vec3 color2;
+      uniform float mixAmount;
+      varying vec3 vPos;
+      void main() {
+        float grad = (vPos.y + 0.3) / 0.6; // Y方向グラデーション
+        vec3 col = mix(color1, color2, grad);
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
+    metalness: 1.0,
+    roughness: 0.2
   });
+
   ironMesh = new THREE.Mesh(geo, mat);
   scene.add(ironMesh);
 }
 
-// 鉄球のカラー変化（2〜3色、10秒ごとに1色変化）
+// 鉄球カラー更新 & 回転
 function updateIronSphere() {
   if (!ironMesh || !glassMesh) return;
 
   const elapsed = (Date.now() - startTime) / 1000; // 秒
-  const progress = Math.min(elapsed / 60, 1.0); // 60秒でガラス変化
+  const progress = Math.min(elapsed / 60, 1.0); // ガラス用進行度
 
-  // ===== グラデーション用カラー配列 =====
+  // ===== 10秒ごとに色ペア切り替え =====
   const colors = [
-    new THREE.Color(1, 0, 0),   // 赤
-    new THREE.Color(1, 0.5, 0), // オレンジ
-    new THREE.Color(1, 1, 0)    // 黄色
+    [new THREE.Color(1, 0, 0), new THREE.Color(1, 1, 1)], // 赤×白
+    [new THREE.Color(0, 0, 1), new THREE.Color(1, 1, 1)], // 青×白
+    [new THREE.Color(1, 1, 1), new THREE.Color(0, 0, 0)]  // 白×黒
   ];
+  const index = Math.floor(elapsed / 10) % colors.length;
+  const nextIndex = (index + 1) % colors.length;
+  const blend = (elapsed % 10) / 10.0; // 0→1で10秒かけて変化
 
-  // 10秒ごとに色が切り替わる
-  const cycleTime = 10.0;
-  const t = (elapsed % (colors.length * cycleTime)) / cycleTime;
-  const i1 = Math.floor(t);
-  const i2 = (i1 + 1) % colors.length;
-  const blend = t - i1; // 0～1の間で補間
+  const colorA = new THREE.Color().lerpColors(colors[index][0], colors[nextIndex][0], blend);
+  const colorB = new THREE.Color().lerpColors(colors[index][1], colors[nextIndex][1], blend);
 
-  const color = new THREE.Color().lerpColors(colors[i1], colors[i2], blend);
+  ironMesh.material.uniforms.color1.value.copy(colorA);
+  ironMesh.material.uniforms.color2.value.copy(colorB);
 
-  // マテリアルに適用（メタリック感維持）
-  ironMesh.material.color.copy(color);
-  ironMesh.material.emissive.copy(color);
-  ironMesh.material.emissiveIntensity = 1.5;
-  ironMesh.material.needsUpdate = true;
+  // ===== 鉄球回転 =====
+  ironMesh.rotation.y += 0.001;
+  ironMesh.rotation.x += 0.0005;
 
   // ===== ガラスの透明化 =====
   const mat = glassMesh.material;
@@ -129,12 +150,7 @@ function updateIronSphere() {
   mat.transmission = 0.5 + 0.5 * progress;
   mat.clearcoatRoughness = 0.3 * (1 - progress);
   mat.needsUpdate = true;
-
-  // ===== 鉄球をゆっくり回転 =====
-  ironMesh.rotation.y += 0.002; // Y軸回転
-  ironMesh.rotation.x += 0.001; // 少しXも回転で立体感
 }
-
 
 // アニメーション
 function animate() {
