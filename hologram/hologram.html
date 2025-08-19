@@ -206,22 +206,6 @@ function createIronSphere() {
 }
 
 
-function animate() {
-  requestAnimationFrame(animate);
-
-  updateIronGradient();
-  updateGlass();
-
-  // 液体ノイズ用の時間を渡す
-  if (ironMesh && ironMesh.material.userData.shader) {
-    ironMesh.material.userData.shader.uniforms.uTime.value = (Date.now() - startTime) / 1000;
-  }
-
-  controls.update();
-  renderer.render(scene, camera);
-}
-
-
 // === 2色グラデのパターンを10秒ごとに切替 ===
 // 例：赤×白 → 青×白 → 白×黒
 const PAIRS = [
@@ -280,7 +264,13 @@ function animate() {
   updateGlass();
   controls.update();
   renderer.render(scene, camera);
+
+  if (ironMesh && ironMesh.material.userData.shader) {
+  ironMesh.material.userData.shader.uniforms.uTime.value = (Date.now() - startTime) / 1000;
+  }
+
 }
+
 animate();
 
 // === リサイズ ===
