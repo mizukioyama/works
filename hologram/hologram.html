@@ -75,7 +75,7 @@ function createGlassSphere() {
   scene.add(glassMesh);
 }
 
-// === メタリック鉄球（2色グラデを頂点カラーで表現） ===
+// === メタリック鉄球（液体変形あり） ===
 let ironMesh, ironGeo, colorAttr, mixAttr;
 let startTime = Date.now();
 
@@ -83,18 +83,16 @@ function createIronSphere() {
   const radius = 0.3;
   ironGeo = new THREE.SphereGeometry(radius, 128, 128);
 
-  // 頂点カラー用バッファ（各頂点のYベースmixを固定計算）
+  // 頂点カラー（Y基準のmix値を保持）
   const count = ironGeo.attributes.position.count;
   const colors = new Float32Array(count * 3);
   const mixes  = new Float32Array(count);
 
   const pos = ironGeo.attributes.position;
   for (let i = 0; i < count; i++) {
-    const y = pos.getY(i);          // ローカルY
-    const mix = (y / radius + 1) * 0.5; // 0..1（下=0, 上=1）
+    const y = pos.getY(i);
+    const mix = (y / radius + 1) * 0.5;
     mixes[i] = THREE.MathUtils.clamp(mix, 0, 1);
-
-    // 初期は赤×白の中間で仮セット（後で毎フレーム更新）
     colors[i*3+0] = 1.0;
     colors[i*3+1] = 0.6;
     colors[i*3+2] = 0.6;
@@ -102,22 +100,46 @@ function createIronSphere() {
   colorAttr = new THREE.BufferAttribute(colors, 3);
   mixAttr   = new THREE.BufferAttribute(mixes, 1);
   ironGeo.setAttribute('color', colorAttr);
-  ironGeo.setAttribute('mix', mixAttr); // 自作メモ用（更新時に参照）
+  ironGeo.setAttribute('mix', mixAttr);
 
-  // PBRマテリアル（メタル反射を最大化）
   const mat = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff,         // ベースは白（頂点カラーで着色）
-    vertexColors: true,      // ← これが重要：頂点カラーで表面色を決める
-    metalness: 1.0,          // 金属最大
-    roughness: 0.08,         // 鏡面寄り
-    envMapIntensity: 1.8,    // 環境反射を強調
+    color: 0xffffff,
+    vertexColors: true,
+    metalness: 1.0,
+    roughness: 0.08,
+    envMapIntensity: 1.8,
     clearcoat: 1.0,
     clearcoatRoughness: 0.03
   });
 
+  // === 液体ノイズ変形をシェーダーに注入 ===
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = { value: 0 };
+    shader.vertexShader = `
+      uniform float uTime;
+      ${shader.vertexShader}
+    `.replace(
+      `#include <begin_vertex>`,
+      `
+        // 元の頂点座標
+        vec3 transformed = vec3(position);
+
+        // 液体っぽい変形（sin/cosで揺らぎ）
+        float noise = 
+          sin(position.x * 5.0 + uTime * 1.5) * 0.02 +
+          cos(position.y * 4.0 + uTime * 1.2) * 0.02 +
+          sin(position.z * 6.0 + uTime) * 0.015;
+
+        transformed += normal * noise;
+      `
+    );
+    ironMesh.material.userData.shader = shader;
+  };
+
   ironMesh = new THREE.Mesh(ironGeo, mat);
   scene.add(ironMesh);
 }
+
 
 // === 2色グラデのパターンを10秒ごとに切替 ===
 // 例：赤×白 → 青×白 → 白×黒
