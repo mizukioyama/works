@@ -75,7 +75,7 @@ function createGlassSphere() {
   scene.add(glassMesh);
 }
 
-// === メタリック鉄球（2色グラデを頂点カラーで表現） ===
+// === 液体的に揺らめくメタリック鉄球 ===
 let ironMesh, ironGeo, colorAttr, mixAttr;
 let startTime = Date.now();
 
@@ -83,18 +83,15 @@ function createIronSphere() {
   const radius = 0.3;
   ironGeo = new THREE.SphereGeometry(radius, 128, 128);
 
-  // 頂点カラー用バッファ（各頂点のYベースmixを固定計算）
   const count = ironGeo.attributes.position.count;
   const colors = new Float32Array(count * 3);
   const mixes  = new Float32Array(count);
 
   const pos = ironGeo.attributes.position;
   for (let i = 0; i < count; i++) {
-    const y = pos.getY(i);          // ローカルY
-    const mix = (y / radius + 1) * 0.5; // 0..1（下=0, 上=1）
+    const y = pos.getY(i);
+    const mix = (y / radius + 1) * 0.5;
     mixes[i] = THREE.MathUtils.clamp(mix, 0, 1);
-
-    // 初期は赤×白の中間で仮セット（後で毎フレーム更新）
     colors[i*3+0] = 1.0;
     colors[i*3+1] = 0.6;
     colors[i*3+2] = 0.6;
@@ -102,22 +99,112 @@ function createIronSphere() {
   colorAttr = new THREE.BufferAttribute(colors, 3);
   mixAttr   = new THREE.BufferAttribute(mixes, 1);
   ironGeo.setAttribute('color', colorAttr);
-  ironGeo.setAttribute('mix', mixAttr); // 自作メモ用（更新時に参照）
+  ironGeo.setAttribute('mix', mixAttr);
 
-  // PBRマテリアル（メタル反射を最大化）
   const mat = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff,         // ベースは白（頂点カラーで着色）
-    vertexColors: true,      // ← これが重要：頂点カラーで表面色を決める
-    metalness: 1.0,          // 金属最大
-    roughness: 0.08,         // 鏡面寄り
-    envMapIntensity: 1.8,    // 環境反射を強調
+    color: 0xffffff,
+    vertexColors: true,
+    metalness: 1.0,
+    roughness: 0.08,
+    envMapIntensity: 2.0,
     clearcoat: 1.0,
     clearcoatRoughness: 0.03
   });
 
+  // === Perlin Noise による液体変形を注入 ===
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = { value: 0 };
+
+    // GLSL: Simplex/Perlin風ノイズ関数を追加
+    shader.vertexShader = `
+      uniform float uTime;
+
+      // --- GLSL Noise ---
+      vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+      vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
+      float snoise(vec3 v){
+        const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+        const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+
+        vec3 i  = floor(v + dot(v, C.yyy) );
+        vec3 x0 =   v - i + dot(i, C.xxx) ;
+
+        vec3 g = step(x0.yzx, x0.xyz);
+        vec3 l = 1.0 - g;
+        vec3 i1 = min( g.xyz, l.zxy );
+        vec3 i2 = max( g.xyz, l.zxy );
+
+        vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+        vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+        vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
+
+        i = mod289(i); 
+        vec4 p = permute( permute( permute(
+                  i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
+                + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+
+        float n_ = 0.142857142857;
+        vec3  ns = n_ * D.wyz - D.xzx;
+
+        vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+        vec4 x_ = floor(j * ns.z);
+        vec4 y_ = floor(j - 7.0 * x_ );
+
+        vec4 x = x_ *ns.x + ns.yyyy;
+        vec4 y = y_ *ns.x + ns.yyyy;
+        vec4 h = 1.0 - abs(x) - abs(y);
+
+        vec4 b0 = vec4( x.xy, y.xy );
+        vec4 b1 = vec4( x.zw, y.zw );
+
+        vec4 s0 = floor(b0)*2.0 + 1.0;
+        vec4 s1 = floor(b1)*2.0 + 1.0;
+        vec4 sh = -step(h, vec4(0.0));
+
+        vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+        vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+
+        vec3 p0 = vec3(a0.xy,h.x);
+        vec3 p1 = vec3(a0.zw,h.y);
+        vec3 p2 = vec3(a1.xy,h.z);
+        vec3 p3 = vec3(a1.zw,h.w);
+
+        vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+        p0 *= norm.x;
+        p1 *= norm.y;
+        p2 *= norm.z;
+        p3 *= norm.w;
+
+        vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+        m = m * m;
+        return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), 
+                                      dot(p2,x2), dot(p3,x3) ) );
+      }
+      // ------------------
+
+      ${shader.vertexShader}
+    `.replace(
+      `#include <begin_vertex>`,
+      `
+        vec3 transformed = vec3(position);
+
+        // 液体っぽくノイズで表面を変形
+        float n = snoise(position * 4.0 + vec3(uTime*0.5, uTime*0.3, uTime*0.7));
+        transformed += normal * n * 0.05; // 揺らぎの強さ
+      `
+    );
+
+    ironMesh.material.userData.shader = shader;
+  };
+
   ironMesh = new THREE.Mesh(ironGeo, mat);
   scene.add(ironMesh);
 }
+
 
 // === 2色グラデのパターンを10秒ごとに切替 ===
 // 例：赤×白 → 青×白 → 白×黒
@@ -177,7 +264,13 @@ function animate() {
   updateGlass();
   controls.update();
   renderer.render(scene, camera);
+
+  if (ironMesh && ironMesh.material.userData.shader) {
+  ironMesh.material.userData.shader.uniforms.uTime.value = (Date.now() - startTime) / 1000;
+  }
+
 }
+
 animate();
 
 // === リサイズ ===
