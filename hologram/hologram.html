@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>赤熱化する鉄球＋クリアになるガラス球</title>
+<title>グラデーション変化するメタリック鉄球＋ガラス球</title>
 <style>
   body { margin: 0; background: black; overflow: hidden; }
   canvas { display: block; }
@@ -61,7 +61,7 @@ let glassMesh;
 function createGlassSphere() {
   const geo = new THREE.SphereGeometry(1, 64, 64);
   const mat = new THREE.MeshPhysicalMaterial({
-    transmission: 0.5,   // スタートは曇り気味
+    transmission: 0.5,
     transparent: true,
     roughness: 0.5,
     metalness: 0,
@@ -69,77 +69,100 @@ function createGlassSphere() {
     thickness: 0.5,
     reflectivity: 1,
     clearcoat: 1,
-    clearcoatRoughness: 0.3 // スタート時はクリアコートも曇り気味
+    clearcoatRoughness: 0.3
   });
   glassMesh = new THREE.Mesh(geo, mat);
   scene.add(glassMesh);
 }
 
-// グラデーション用の色ペア
-const colorPairs = [
-  [new THREE.Color(1, 0, 0), new THREE.Color(1, 1, 1)], // 赤 × 白
-  [new THREE.Color(0, 0, 1), new THREE.Color(1, 1, 1)], // 青 × 白
-  [new THREE.Color(1, 1, 1), new THREE.Color(0, 0, 0)]  // 白 × 黒
-];
+// 中心の鉄球（ShaderMaterialで2色グラデーション）
+let ironMesh, ironMaterial;
+let startTime = Date.now();
 
-let ironMesh;
 function createIronSphere() {
   const geo = new THREE.SphereGeometry(0.3, 128, 128);
 
-  const mat = new THREE.ShaderMaterial({
-    uniforms: {
-      color1: { value: new THREE.Color(1, 0, 0) },
-      color2: { value: new THREE.Color(1, 1, 1) }
-    },
+  const uniforms = {
+    color1: { value: new THREE.Color(1, 0, 0) }, // 初期 赤
+    color2: { value: new THREE.Color(1, 1, 1) }, // 初期 白
+    envMap: { value: scene.environment }
+  };
+
+  ironMaterial = new THREE.ShaderMaterial({
+    uniforms,
     vertexShader: `
-      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vPos;
       void main() {
-        vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        vPos = position;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
     `,
     fragmentShader: `
       uniform vec3 color1;
       uniform vec3 color2;
-      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vPos;
+
       void main() {
-        // vUv.y に沿ったグラデーション
-        vec3 grad = mix(color1, color2, vUv.y);
-        gl_FragColor = vec4(grad, 1.0);
+        // グラデーションをY方向で補間
+        float mixFactor = (vNormal.y + 1.0) * 0.5;
+        vec3 baseColor = mix(color1, color2, mixFactor);
+
+        // 金属感を強調（簡易スペキュラ）
+        vec3 viewDir = normalize(-vPos);
+        vec3 reflectDir = reflect(-viewDir, normalize(vNormal));
+        float spec = pow(max(dot(reflectDir, viewDir), 0.0), 64.0);
+
+        gl_FragColor = vec4(baseColor + spec * 0.8, 1.0);
       }
     `,
     metalness: 1.0,
-    roughness: 0.05
+    roughness: 0.1
   });
 
-  ironMesh = new THREE.Mesh(geo, mat);
+  ironMesh = new THREE.Mesh(geo, ironMaterial);
   scene.add(ironMesh);
 }
 
-// アップデート処理
+// グラデーションカラーセット
+const gradientSets = [
+  [new THREE.Color(1, 0, 0), new THREE.Color(1, 1, 1)], // 赤×白
+  [new THREE.Color(0, 0, 1), new THREE.Color(1, 1, 1)], // 青×白
+  [new THREE.Color(1, 1, 1), new THREE.Color(0, 0, 0)]  // 白×黒
+];
+
 function updateIronSphere() {
-  if (!ironMesh || !glassMesh) return;
+  if (!ironMesh || !glassMesh || !ironMaterial) return;
 
-  const elapsed = (Date.now() - startTime) / 1000;
-  const progress = Math.min(elapsed / 60, 1.0);
+  const elapsed = (Date.now() - startTime) / 1000; // 秒
+  const cycleTime = 10.0; // 10秒ごとに変化
+  const t = (elapsed / cycleTime) % gradientSets.length;
 
-  // ===== 10秒ごとに色を切り替える =====
-  const pairIndex = Math.floor(elapsed / 10) % colorPairs.length;
-  ironMesh.material.uniforms.color1.value.copy(colorPairs[pairIndex][0]);
-  ironMesh.material.uniforms.color2.value.copy(colorPairs[pairIndex][1]);
+  const i1 = Math.floor(t);
+  const i2 = (i1 + 1) % gradientSets.length;
+  const blend = t - i1;
 
-  // ===== ゆっくり回転 =====
+  // 2色を補間
+  const col1 = new THREE.Color().lerpColors(gradientSets[i1][0], gradientSets[i2][0], blend);
+  const col2 = new THREE.Color().lerpColors(gradientSets[i1][1], gradientSets[i2][1], blend);
+
+  ironMaterial.uniforms.color1.value.copy(col1);
+  ironMaterial.uniforms.color2.value.copy(col2);
+
+  // 鉄球をゆっくり回転
   ironMesh.rotation.y += 0.002;
   ironMesh.rotation.x += 0.001;
 
-  // ===== ガラスぼかし変化 =====
+  // ガラスの変化（保持）
+  const progress = Math.min(elapsed / 60, 1.0);
   const mat = glassMesh.material;
   mat.roughness = 0.5 * (1 - progress);
   mat.transmission = 0.5 + 0.5 * progress;
   mat.clearcoatRoughness = 0.3 * (1 - progress);
   mat.needsUpdate = true;
 }
-
 
 // アニメーション
 function animate() {
@@ -148,10 +171,9 @@ function animate() {
   controls.update();
   renderer.render(scene, camera);
 }
-
 animate();
 
-// リサイズ
+// リサイズ対応
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
