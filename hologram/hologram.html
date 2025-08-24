@@ -3,11 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>メタリック2色グラデ鉄球＋クリア化ガラス球</title>
-<style>
-  body { margin: 0; background: black; overflow: hidden; }
-  canvas { display: block; }
-</style>
+<title>メタリック鉄球＋ガラス球＋虹色フレア背景</title>
 
 <script type="importmap">
 {
@@ -32,11 +28,15 @@ camera.position.set(0, 0, 4);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0xf0f0f0); // ← 背景色を白〜グレー
+renderer.setClearColor(0xf0f0f0); // 白〜グレー背景
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
+
+// === コントロール ===
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
 
 // === ライト ===
 scene.add(new THREE.AmbientLight(0xffffff, 0.4));
@@ -44,7 +44,7 @@ const key = new THREE.DirectionalLight(0xffffff, 1.2);
 key.position.set(3, 4, 5);
 scene.add(key);
 
-// === 背景ホログラム虹色リング ===
+// === 背景ホログラム風 虹色フレアリング ===
 const bgGroup = new THREE.Group();
 scene.add(bgGroup);
 
@@ -53,65 +53,56 @@ function createBlurredRing(inner, outer, hue) {
   const mat = new THREE.MeshBasicMaterial({
     color: new THREE.Color(`hsl(${hue},100%,60%)`),
     transparent: true,
-    opacity: 0.08, // 薄くして光が滲む感じ
+    opacity: 0.08, // 薄くして光のにじみ感
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending
   });
   return new THREE.Mesh(geo, mat);
 }
 
-// 複数レイヤーで「ぼかし」表現
+// 複数レイヤーでぼかしを再現
 function addBlurredRing(inner, outer, baseHue) {
   const group = new THREE.Group();
   for (let i = 0; i < 4; i++) {
-    const offset = i * 0.01; // 半径を微妙にずらす
-    const hue = (baseHue + i * 20) % 360; // 色相も少しずらす
+    const offset = i * 0.015;
+    const hue = (baseHue + i * 20) % 360;
     const ring = createBlurredRing(inner - offset, outer + offset, hue);
     group.add(ring);
   }
   return group;
 }
 
-// 背景に大きな虹色リングを配置
+// 複数の虹色リングを奥行き配置
 for (let i = 0; i < 8; i++) {
   const inner = i * 0.4 + 1.2;
-  const outer = inner + 0.02; // 細めのリング
+  const outer = inner + 0.03; // 細め
   const hue = (i * 45) % 360;
   const blurredRing = addBlurredRing(inner, outer, hue);
-  blurredRing.position.z = -i * 0.5;
+  blurredRing.position.z = -i * 0.4;
   bgGroup.add(blurredRing);
 }
 
-// === HDRI ===（鉄球・ガラス球の反射用） ===
+// === HDRI（鉄球とガラス球の反射用） ===
 new RGBELoader()
   .setPath("https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/")
   .load("royal_esplanade_1k.hdr", (tex) => {
     tex.mapping = THREE.EquirectangularReflectionMapping;
     scene.environment = tex;
-    // 背景はリングにするので HDRI は非表示
-    // scene.background = tex;
-
     createGlassSphere();
     createIronSphere();
   });
 
-// === 背景リング アニメーション ===
+// === 背景フレア アニメーション ===
 function updateBackground() {
   const t = (Date.now() - startTime) / 1000;
   bgGroup.children.forEach((group, i) => {
     group.children.forEach((ring, j) => {
-      const hueShift = (i * 40 + j * 15 + t * 40) % 360;
+      const hueShift = (i * 40 + j * 20 + t * 40) % 360;
       ring.material.color.setHSL(hueShift / 360, 1, 0.65);
-
-      // 透明度をわずかに揺らす（フレア感アップ）
-      ring.material.opacity = 0.05 + 0.05 * Math.sin(t * 2 + i + j);
+      ring.material.opacity = 0.04 + 0.04 * Math.sin(t * 2 + i + j);
     });
-
-    // ゆるやかに拡縮させて呼吸感
     const pulse = 1 + 0.05 * Math.sin(t + i);
     group.scale.set(pulse, pulse, 1);
-
-    // ゆっくり回転
     group.rotation.z += 0.0003 * (i % 2 === 0 ? 1 : -1);
   });
 }
@@ -121,7 +112,7 @@ let glassMesh;
 function createGlassSphere() {
   const geo = new THREE.SphereGeometry(1, 64, 64);
   const mat = new THREE.MeshPhysicalMaterial({
-    transmission: 0.5,     // 開始時は曇り
+    transmission: 0.5,
     transparent: true,
     roughness: 0.5,
     metalness: 0.0,
@@ -134,7 +125,7 @@ function createGlassSphere() {
   scene.add(glassMesh);
 }
 
-// === メタリック鉄球（2色グラデを頂点カラーで表現） ===
+// === メタリック鉄球 ===
 let ironMesh, ironGeo, colorAttr, mixAttr;
 let startTime = Date.now();
 
@@ -142,18 +133,15 @@ function createIronSphere() {
   const radius = 0.3;
   ironGeo = new THREE.SphereGeometry(radius, 128, 128);
 
-  // 頂点カラー用バッファ（各頂点のYベースmixを固定計算）
   const count = ironGeo.attributes.position.count;
   const colors = new Float32Array(count * 3);
   const mixes  = new Float32Array(count);
 
   const pos = ironGeo.attributes.position;
   for (let i = 0; i < count; i++) {
-    const y = pos.getY(i);          // ローカルY
-    const mix = (y / radius + 1) * 0.5; // 0..1（下=0, 上=1）
+    const y = pos.getY(i);
+    const mix = (y / radius + 1) * 0.5;
     mixes[i] = THREE.MathUtils.clamp(mix, 0, 1);
-
-    // 初期は赤×白の中間で仮セット（後で毎フレーム更新）
     colors[i*3+0] = 1.0;
     colors[i*3+1] = 0.6;
     colors[i*3+2] = 0.6;
@@ -161,15 +149,14 @@ function createIronSphere() {
   colorAttr = new THREE.BufferAttribute(colors, 3);
   mixAttr   = new THREE.BufferAttribute(mixes, 1);
   ironGeo.setAttribute('color', colorAttr);
-  ironGeo.setAttribute('mix', mixAttr); // 自作メモ用（更新時に参照）
+  ironGeo.setAttribute('mix', mixAttr);
 
-  // PBRマテリアル（メタル反射を最大化）
   const mat = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff,         // ベースは白（頂点カラーで着色）
-    vertexColors: true,      // ← これが重要：頂点カラーで表面色を決める
-    metalness: 1.0,          // 金属最大
-    roughness: 0.08,         // 鏡面寄り
-    envMapIntensity: 1.8,    // 環境反射を強調
+    color: 0xffffff,
+    vertexColors: true,
+    metalness: 1.0,
+    roughness: 0.08,
+    envMapIntensity: 1.8,
     clearcoat: 1.0,
     clearcoatRoughness: 0.03
   });
@@ -178,29 +165,25 @@ function createIronSphere() {
   scene.add(ironMesh);
 }
 
-// === 2色グラデのパターンを10秒ごとに切替 ===
-// 例：赤×白 → 青×白 → 白×黒
+// === 鉄球の2色グラデ切替 ===
 const PAIRS = [
-  [ new THREE.Color(1, 0, 0), new THREE.Color(1, 1, 1) ], // 赤×白
-  [ new THREE.Color(0, 0, 1), new THREE.Color(1, 1, 1) ], // 青×白
-  [ new THREE.Color(1, 1, 1), new THREE.Color(0, 0, 0) ]  // 白×黒
+  [ new THREE.Color(1, 0, 0), new THREE.Color(1, 1, 1) ],
+  [ new THREE.Color(0, 0, 1), new THREE.Color(1, 1, 1) ],
+  [ new THREE.Color(1, 1, 1), new THREE.Color(0, 0, 0) ]
 ];
 const PHASE_SECONDS = 10;
 
 function updateIronGradient() {
   if (!ironMesh) return;
-
   const elapsed = (Date.now() - startTime) / 1000;
   const phaseF  = (elapsed / PHASE_SECONDS) % PAIRS.length;
   const i1 = Math.floor(phaseF);
   const i2 = (i1 + 1) % PAIRS.length;
-  const blend = phaseF - i1; // 0..1
+  const blend = phaseF - i1;
 
-  // 現在の2色をペア間で滑らかに補間
   const c1 = new THREE.Color().lerpColors(PAIRS[i1][0], PAIRS[i2][0], blend);
   const c2 = new THREE.Color().lerpColors(PAIRS[i1][1], PAIRS[i2][1], blend);
 
-  // 頂点カラーを更新（mix: 下=0, 上=1）
   const colors = colorAttr.array;
   const mixes  = mixAttr.array;
   for (let i = 0; i < mixes.length; i++) {
@@ -211,20 +194,18 @@ function updateIronGradient() {
   }
   colorAttr.needsUpdate = true;
 
-  // 鉄球をゆっくり回転
   ironMesh.rotation.y += 0.003;
   ironMesh.rotation.x += 0.0015;
 }
 
-// === ガラス：60秒で曇り→クリア ===
+// === ガラスの透明化アニメ ===
 function updateGlass() {
   if (!glassMesh) return;
   const elapsed = (Date.now() - startTime) / 1000;
   const p = Math.min(elapsed / 60, 1.0);
-
   const m = glassMesh.material;
-  m.roughness = 0.5 * (1 - p);        // 0.5 → 0
-  m.transmission = 0.5 + 0.5 * p;     // 0.5 → 1
+  m.roughness = 0.5 * (1 - p);
+  m.transmission = 0.5 + 0.5 * p;
   m.clearcoatRoughness = 0.3 * (1 - p);
   m.needsUpdate = true;
 }
@@ -235,11 +216,12 @@ function animate() {
   updateIronGradient();
   updateGlass();
   updateBackground();
+  controls.update();
   renderer.render(scene, camera);
 }
 animate();
 
-// === リサイズ ===
+// === リサイズ対応 ===
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
