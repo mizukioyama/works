@@ -293,15 +293,11 @@ camera.position.set(0, 0, 4);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0xf0f0f0); // ← 背景色を白〜グレー
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
-
-// === カメラ固定（OrbitControlsは削除 or 無効化） ===
-// const controls = new OrbitControls(camera, renderer.domElement);
-// controls.enableDamping = true;
-// controls.enabled = false;
 
 // === ライト ===
 scene.add(new THREE.AmbientLight(0xffffff, 0.4));
@@ -309,66 +305,54 @@ const key = new THREE.DirectionalLight(0xffffff, 1.2);
 key.position.set(3, 4, 5);
 scene.add(key);
 
-// === 背景ホログラム四角リング ===
+// === 背景ホログラム円形リング ===
 const bgGroup = new THREE.Group();
 scene.add(bgGroup);
 
-function createSquareRing(size, thickness, color) {
-  const outer = new THREE.PlaneGeometry(size, size);
-  const inner = new THREE.PlaneGeometry(size - thickness, size - thickness);
-
-  const shape = new THREE.Shape();
-  shape.moveTo(size/2, size/2);
-  shape.lineTo(-size/2, size/2);
-  shape.lineTo(-size/2, -size/2);
-  shape.lineTo(size/2, -size/2);
-  shape.lineTo(size/2, size/2);
-
-  const hole = new THREE.Path();
-  hole.moveTo((size-thickness)/2, (size-thickness)/2);
-  hole.lineTo(-(size-thickness)/2, (size-thickness)/2);
-  hole.lineTo(-(size-thickness)/2, -(size-thickness)/2);
-  hole.lineTo((size-thickness)/2, -(size-thickness)/2);
-  hole.lineTo((size-thickness)/2, (size-thickness)/2);
-
-  shape.holes.push(hole);
-
-  const geo = new THREE.ShapeGeometry(shape);
+function createCircleRing(inner, outer, color) {
+  const geo = new THREE.RingGeometry(inner, outer, 128);
   const mat = new THREE.MeshBasicMaterial({
     color: color,
     transparent: true,
-    opacity: 0.3,
+    opacity: 0.25,
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending
   });
   return new THREE.Mesh(geo, mat);
 }
 
-// 複数リングを作成して配置
-for (let i = 1; i <= 5; i++) {
-  const ring = createSquareRing(i*3, 0.2, new THREE.Color(`hsl(${i*60},100%,70%)`));
-  ring.position.z = -i * 2;
+// 複数リング作成
+for (let i = 0; i < 6; i++) {
+  const ring = createCircleRing(i * 0.6 + 0.5, i * 0.6 + 0.7, new THREE.Color(`hsl(${i*50},100%,70%)`));
+  ring.position.z = -i * 1.2;
   bgGroup.add(ring);
 }
 
-// === HDRI ===（必要なら残す）
+// === HDRI ===（鉄球・ガラス球の反射用） ===
 new RGBELoader()
   .setPath("https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/")
   .load("royal_esplanade_1k.hdr", (tex) => {
     tex.mapping = THREE.EquirectangularReflectionMapping;
     scene.environment = tex;
-    // scene.background = tex; ←背景はリングにしたいので削除
+    // 背景はリングにするので HDRI は非表示
+    // scene.background = tex;
 
     createGlassSphere();
     createIronSphere();
   });
 
-// === 背景アニメーション（ホログラム風に光らせる） ===
+// === 背景リング アニメーション ===
 function updateBackground() {
   const t = (Date.now() - startTime) / 1000;
   bgGroup.children.forEach((ring, i) => {
-    ring.material.opacity = 0.2 + 0.2 * Math.sin(t + i);
-    ring.rotation.z += 0.001 * (i % 2 === 0 ? 1 : -1);
+    // フレア効果: スケールと透明度を時間で変化
+    const pulse = 1 + 0.15 * Math.sin(t * 2 + i);
+    ring.scale.set(pulse, pulse, 1);
+
+    ring.material.opacity = 0.15 + 0.15 * Math.sin(t * 3 + i * 0.5);
+
+    // ゆっくり回転して幻想感
+    ring.rotation.z += 0.0008 * (i % 2 === 0 ? 1 : -1);
   });
 }
 
