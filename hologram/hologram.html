@@ -97,17 +97,13 @@ function updateBackground() {
   const t = (Date.now() - startTime) / 1000;
   bgGroup.children.forEach((group, i) => {
     group.children.forEach((ring, j) => {
-      // 虹色フレア：時間で色相を回す
-const hueShift = (t * 20 + i * 45 + j * 15) % 360;
-ring.material.color.setHSL(hueShift / 360, 1.0, 0.6);
-// フレア感の揺らぎ（透明度変化）
-  ring.material.opacity = 0.1 + 0.05 * Math.sin(t * 2 + i + j);
-});
-
+      const hueShift = (i * 40 + j * 20 + t * 40) % 360;
+      ring.material.color.setHSL(hueShift / 360, 1, 0.65);
+      ring.material.opacity = 0.04 + 0.04 * Math.sin(t * 2 + i + j);
+    });
     const pulse = 1 + 0.05 * Math.sin(t + i);
     group.scale.set(pulse, pulse, 1);
-    // 拡縮はやめて回転のみ
-group.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
+    group.rotation.z += 0.0003 * (i % 2 === 0 ? 1 : -1);
   });
 }
 

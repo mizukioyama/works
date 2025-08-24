@@ -310,3 +310,22 @@ ring.material.color.setHSL(hueShift / 360, 1.0, 0.6);
 group.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
 });
 }
+
+
+// === 背景リング アニメーション ===
+function updateBackground() {
+  const t = (Date.now() - startTime) / 1000;
+  bgGroup.children.forEach((group, i) => {
+    group.children.forEach((ring, j) => {
+      // 虹色フレア：時間で色相を回す
+      const hueShift = (t * 20 + i * 45 + j * 15) % 360;
+      ring.material.color.setHSL(hueShift / 360, 1.0, 0.6);
+
+      // フレア感の揺らぎ（透明度変化）
+      ring.material.opacity = 0.1 + 0.05 * Math.sin(t * 2 + i + j);
+    });
+
+    // 回転のみ（交互に逆方向）
+    group.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
+  });
+}
