@@ -70,26 +70,6 @@ for (let i = 0; i < 12; i++) {
   bgGroup.add(ring);
 }
 
-// === 背景リング アニメーション ===
-function updateBackground() {
-  const t = (Date.now() - startTime) / 1000;
-  bgGroup.children.forEach((ring, i) => {
-    // リングが呼吸するようにスケール変化
-    const pulse = 1 + 0.05 * Math.sin(t * 2 + i);
-    ring.scale.set(pulse, pulse, 1);
-
-    // 色相を少し時間で回す → フレアっぽく
-    const hueShift = (i * 30 + t * 20) % 360;
-    ring.material.color.setHSL(hueShift / 360, 1, 0.65);
-
-    // 透明度を揺らして光が滲む感じ
-    ring.material.opacity = 0.1 + 0.1 * Math.sin(t * 3 + i);
-
-    // ゆっくり回転して幻想感
-    ring.rotation.z += 0.0005 * (i % 2 === 0 ? 1 : -1);
-  });
-}
-
 // === HDRI ===（鉄球・ガラス球の反射用） ===
 new RGBELoader()
   .setPath("https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/")
@@ -107,14 +87,19 @@ new RGBELoader()
 function updateBackground() {
   const t = (Date.now() - startTime) / 1000;
   bgGroup.children.forEach((ring, i) => {
-    // フレア効果: スケールと透明度を時間で変化
-    const pulse = 1 + 0.15 * Math.sin(t * 2 + i);
+    // リングが呼吸するようにスケール変化
+    const pulse = 1 + 0.05 * Math.sin(t * 2 + i);
     ring.scale.set(pulse, pulse, 1);
 
-    ring.material.opacity = 0.15 + 0.15 * Math.sin(t * 3 + i * 0.5);
+    // 色相を少し時間で回す → フレアっぽく
+    const hueShift = (i * 30 + t * 20) % 360;
+    ring.material.color.setHSL(hueShift / 360, 1, 0.65);
+
+    // 透明度を揺らして光が滲む感じ
+    ring.material.opacity = 0.1 + 0.1 * Math.sin(t * 3 + i);
 
     // ゆっくり回転して幻想感
-    ring.rotation.z += 0.0008 * (i % 2 === 0 ? 1 : -1);
+    ring.rotation.z += 0.0005 * (i % 2 === 0 ? 1 : -1);
   });
 }
 
