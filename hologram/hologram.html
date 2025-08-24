@@ -111,16 +111,6 @@ function updateBackground() {
   });
 }
 
-// === アニメーションループ ===
-function animate() {
-  requestAnimationFrame(animate);
-  updateIronGradient();
-  updateGlass();
-  updateBackground();
-  renderer.render(scene, camera);
-}
-animate();
-
 // === ガラス球（60秒でクリア化） ===
 let glassMesh;
 function createGlassSphere() {
@@ -234,15 +224,16 @@ function updateGlass() {
   m.needsUpdate = true;
 }
 
-// === ループ ===
+// === アニメーションループ ===
 function animate() {
   requestAnimationFrame(animate);
   updateIronGradient();
   updateGlass();
-  controls.update();
+  updateBackground();
   renderer.render(scene, camera);
 }
 animate();
+
 
 // === リサイズ ===
 window.addEventListener("resize", () => {
