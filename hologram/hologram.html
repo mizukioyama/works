@@ -48,23 +48,46 @@ scene.add(key);
 const bgGroup = new THREE.Group();
 scene.add(bgGroup);
 
-function createCircleRing(inner, outer, color) {
+function createFlareRing(inner, outer, hue) {
   const geo = new THREE.RingGeometry(inner, outer, 128);
   const mat = new THREE.MeshBasicMaterial({
-    color: color,
+    color: new THREE.Color(`hsl(${hue},100%,70%)`), // フレア色 (虹色風)
     transparent: true,
-    opacity: 0.25,
+    opacity: 0.15,               // 弱めの透明度でぼかし効果
     side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending
+    blending: THREE.AdditiveBlending // 光を加算合成で滲ませる
   });
   return new THREE.Mesh(geo, mat);
 }
 
-// 複数リング作成
-for (let i = 0; i < 6; i++) {
-  const ring = createCircleRing(i * 0.6 + 0.5, i * 0.6 + 0.7, new THREE.Color(`hsl(${i*50},100%,70%)`));
-  ring.position.z = -i * 1.2;
+// 複数リング作成（細め・色相をずらしてフレア風）
+for (let i = 0; i < 12; i++) {
+  const inner = i * 0.25 + 0.8;
+  const outer = inner + 0.02; // ← 幅を細く
+  const hue = (i * 30) % 360; // 虹色に変化
+  const ring = createFlareRing(inner, outer, hue);
+  ring.position.z = -i * 0.5;
   bgGroup.add(ring);
+}
+
+// === 背景リング アニメーション ===
+function updateBackground() {
+  const t = (Date.now() - startTime) / 1000;
+  bgGroup.children.forEach((ring, i) => {
+    // リングが呼吸するようにスケール変化
+    const pulse = 1 + 0.05 * Math.sin(t * 2 + i);
+    ring.scale.set(pulse, pulse, 1);
+
+    // 色相を少し時間で回す → フレアっぽく
+    const hueShift = (i * 30 + t * 20) % 360;
+    ring.material.color.setHSL(hueShift / 360, 1, 0.65);
+
+    // 透明度を揺らして光が滲む感じ
+    ring.material.opacity = 0.1 + 0.1 * Math.sin(t * 3 + i);
+
+    // ゆっくり回転して幻想感
+    ring.rotation.z += 0.0005 * (i % 2 === 0 ? 1 : -1);
+  });
 }
 
 // === HDRI ===（鉄球・ガラス球の反射用） ===

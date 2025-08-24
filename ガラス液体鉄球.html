@@ -285,83 +285,48 @@ window.addEventListener("resize", () => {
 
 
 
-// === 基本セットアップ ===
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(0, 0, 4);
-
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0xf0f0f0); // ← 背景色を白〜グレー
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.2;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-document.body.appendChild(renderer.domElement);
-
-// === ライト ===
-scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-const key = new THREE.DirectionalLight(0xffffff, 1.2);
-key.position.set(3, 4, 5);
-scene.add(key);
-
 // === 背景ホログラム円形リング ===
 const bgGroup = new THREE.Group();
 scene.add(bgGroup);
 
-function createCircleRing(inner, outer, color) {
+function createFlareRing(inner, outer, hue) {
   const geo = new THREE.RingGeometry(inner, outer, 128);
   const mat = new THREE.MeshBasicMaterial({
-    color: color,
+    color: new THREE.Color(`hsl(${hue},100%,70%)`), // フレア色 (虹色風)
     transparent: true,
-    opacity: 0.25,
+    opacity: 0.15,               // 弱めの透明度でぼかし効果
     side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending
+    blending: THREE.AdditiveBlending // 光を加算合成で滲ませる
   });
   return new THREE.Mesh(geo, mat);
 }
 
-// 複数リング作成
-for (let i = 0; i < 6; i++) {
-  const ring = createCircleRing(i * 0.6 + 0.5, i * 0.6 + 0.7, new THREE.Color(`hsl(${i*50},100%,70%)`));
-  ring.position.z = -i * 1.2;
+// 複数リング作成（細め・色相をずらしてフレア風）
+for (let i = 0; i < 12; i++) {
+  const inner = i * 0.25 + 0.8;
+  const outer = inner + 0.02; // ← 幅を細く
+  const hue = (i * 30) % 360; // 虹色に変化
+  const ring = createFlareRing(inner, outer, hue);
+  ring.position.z = -i * 0.5;
   bgGroup.add(ring);
 }
-
-// === HDRI ===（鉄球・ガラス球の反射用） ===
-new RGBELoader()
-  .setPath("https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/")
-  .load("royal_esplanade_1k.hdr", (tex) => {
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    scene.environment = tex;
-    // 背景はリングにするので HDRI は非表示
-    // scene.background = tex;
-
-    createGlassSphere();
-    createIronSphere();
-  });
 
 // === 背景リング アニメーション ===
 function updateBackground() {
   const t = (Date.now() - startTime) / 1000;
   bgGroup.children.forEach((ring, i) => {
-    // フレア効果: スケールと透明度を時間で変化
-    const pulse = 1 + 0.15 * Math.sin(t * 2 + i);
+    // リングが呼吸するようにスケール変化
+    const pulse = 1 + 0.05 * Math.sin(t * 2 + i);
     ring.scale.set(pulse, pulse, 1);
 
-    ring.material.opacity = 0.15 + 0.15 * Math.sin(t * 3 + i * 0.5);
+    // 色相を少し時間で回す → フレアっぽく
+    const hueShift = (i * 30 + t * 20) % 360;
+    ring.material.color.setHSL(hueShift / 360, 1, 0.65);
+
+    // 透明度を揺らして光が滲む感じ
+    ring.material.opacity = 0.1 + 0.1 * Math.sin(t * 3 + i);
 
     // ゆっくり回転して幻想感
-    ring.rotation.z += 0.0008 * (i % 2 === 0 ? 1 : -1);
+    ring.rotation.z += 0.0005 * (i % 2 === 0 ? 1 : -1);
   });
 }
-
-// === アニメーションループ ===
-function animate() {
-  requestAnimationFrame(animate);
-  updateIronGradient();
-  updateGlass();
-  updateBackground();
-  renderer.render(scene, camera);
-}
-animate();
