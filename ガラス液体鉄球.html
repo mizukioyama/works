@@ -283,46 +283,28 @@ window.addEventListener("resize", () => {
 </body>
 </html>
 
-// === 背景フレアエフェクト ===
-const flareGroup = new THREE.Group();
-scene.add(flareGroup);
-
-function createFlareLayer(radius, hue, opacity) {
-  const geo = new THREE.RingGeometry(radius * 0.9, radius, 128);
+function createBlurredRing(inner, outer, hue) {
+  const geo = new THREE.RingGeometry(inner, outer, 256); // 分割数↑で滑らかに
   const mat = new THREE.MeshBasicMaterial({
-    color: new THREE.Color(`hsl(${hue},100%,70%)`),
+    color: new THREE.Color(`hsl(${hue},100%,60%)`),
     transparent: true,
-    opacity: opacity,
+-   opacity: 0.08, // ← 薄すぎる
++   opacity: 0.15, // ← もう少し濃く
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending
   });
   return new THREE.Mesh(geo, mat);
 }
 
-// 多層フレア（外側ほど薄く、色が変わる）
-function createFlare() {
-  for (let i = 0; i < 6; i++) {
-    const radius = 1.2 + i * 0.3;
-    const hue = (i * 50) % 360;
-    const opacity = 0.15 - i * 0.02;
-    const ring = createFlareLayer(radius, hue, opacity);
-    flareGroup.add(ring);
+function addBlurredRing(inner, outer, baseHue) {
+  const group = new THREE.Group();
+- for (let i = 0; i < 4; i++) {
+-   const offset = i * 0.01;
++ for (let i = 0; i < 8; i++) {  // ← リング枚数増やす
++   const offset = i * 0.015;    // ← ずらし幅を大きく
+    const hue = (baseHue + i * 20) % 360;
+    const ring = createBlurredRing(inner - offset, outer + offset, hue);
+    group.add(ring);
   }
-}
-createFlare();
-
-// === フレアアニメーション ===
-function updateFlare() {
-  const t = (Date.now() - startTime) / 1000;
-  flareGroup.children.forEach((ring, i) => {
-    const hueShift = (t * 20 + i * 40) % 360;
-    ring.material.color.setHSL(hueShift / 360, 1, 0.7);
-
-    // 半径を微妙に拡縮して呼吸感
-    const scale = 1 + 0.05 * Math.sin(t * 2 + i);
-    ring.scale.set(scale, scale, 1);
-
-    // 外側ほど透明度を低く
-    ring.material.opacity = 0.1 / (i + 1);
-  });
+  return group;
 }

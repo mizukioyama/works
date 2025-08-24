@@ -49,11 +49,11 @@ const bgGroup = new THREE.Group();
 scene.add(bgGroup);
 
 function createBlurredRing(inner, outer, hue) {
-  const geo = new THREE.RingGeometry(inner, outer, 128);
+  const geo = new THREE.RingGeometry(inner, outer, 256); // 分割数↑で滑らかに
   const mat = new THREE.MeshBasicMaterial({
     color: new THREE.Color(`hsl(${hue},100%,60%)`),
     transparent: true,
-    opacity: 0.08, // 薄くして光のにじみ感
+    opacity: 0.15, // ← もう少し濃く
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending
   });
@@ -63,8 +63,8 @@ function createBlurredRing(inner, outer, hue) {
 // 複数レイヤーでぼかしを再現
 function addBlurredRing(inner, outer, baseHue) {
   const group = new THREE.Group();
-  for (let i = 0; i < 4; i++) {
-    const offset = i * 0.015;
+  for (let i = 0; i < 8; i++) {  // ← リング枚数増やす
+    const offset = i * 0.015;    // ← ずらし幅を大きく
     const hue = (baseHue + i * 20) % 360;
     const ring = createBlurredRing(inner - offset, outer + offset, hue);
     group.add(ring);
