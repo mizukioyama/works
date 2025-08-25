@@ -17,7 +17,7 @@
 <body>
 <script type="module">
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+//import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 
 // === 基本セットアップ ===
@@ -35,8 +35,8 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 // === コントロール ===
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
+//const controls = new OrbitControls(camera, renderer.domElement);
+//controls.enableDamping = true;
 
 // === ライト ===
 scene.add(new THREE.AmbientLight(0xffffff, 0.4));
@@ -237,7 +237,7 @@ function animate() {
   updateIronGradient();
   updateGlass();
   updateBackground();
-  controls.update();
+  //controls.update();
   renderer.render(scene, camera);
 }
 animate();
