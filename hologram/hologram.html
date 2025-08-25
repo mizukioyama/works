@@ -17,7 +17,6 @@
 <body>
 <script type="module">
 import * as THREE from "three";
-//import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 
 // === 基本セットアップ ===
@@ -73,7 +72,7 @@ function createRainbowFlareTexture(size = 512) {
   return new THREE.CanvasTexture(canvas);
 }
 
-// === フレアリング ===
+// === フレアリング作成 ===
 function createFlareRing(inner, outer) {
   const geo = new THREE.RingGeometry(inner, outer, 128);
   const mat = new THREE.MeshBasicMaterial({
@@ -87,6 +86,7 @@ function createFlareRing(inner, outer) {
   return new THREE.Mesh(geo, mat);
 }
 
+// === 背景フレア配置 ===
 const bgGroup = new THREE.Group();
 scene.add(bgGroup);
 for (let i = 0; i < 5; i++) {
@@ -97,7 +97,6 @@ for (let i = 0; i < 5; i++) {
 
 // === CubeCamera ===
 const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256, {
-  type: THREE.HalfFloatType,
   generateMipmaps: true,
   minFilter: THREE.LinearMipmapLinearFilter
 });
@@ -122,10 +121,8 @@ function createGlassSphere() {
   scene.add(glassMesh);
 }
 
-// === メタリック鉄球 ===
+// === 鉄球 ===
 let ironMesh, ironGeo, colorAttr, mixAttr;
-let startTime = Date.now();
-
 function createIronSphere() {
   const radius = 0.3;
   ironGeo = new THREE.SphereGeometry(radius, 128, 128);
@@ -133,8 +130,8 @@ function createIronSphere() {
   const count = ironGeo.attributes.position.count;
   const colors = new Float32Array(count * 3);
   const mixes  = new Float32Array(count);
-
   const pos = ironGeo.attributes.position;
+
   for (let i = 0; i < count; i++) {
     const y = pos.getY(i);
     const mix = (y / radius + 1) * 0.5;
@@ -158,12 +155,11 @@ function createIronSphere() {
     clearcoat: 1.0,
     clearcoatRoughness: 0.03
   });
-
   ironMesh = new THREE.Mesh(ironGeo, mat);
   scene.add(ironMesh);
 }
 
-// === HDRI ===
+// === HDRI 読み込み後に球を生成 ===
 new RGBELoader()
   .setPath("https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/")
   .load("royal_esplanade_1k.hdr", (tex) => {
@@ -173,36 +169,8 @@ new RGBELoader()
     createIronSphere();
   });
 
-// === アップデート関数 ===
-function updateBackground() {
-  const t = (Date.now() - startTime) / 1000;
-  bgGroup.children.forEach((ring, i) => {
-    ring.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
-    ring.material.opacity = 0.2 + 0.15 * Math.sin(t * 2 + i);
-  });
-}
-
-function updateGlass() {
-  if (!glassMesh) return;
-  const elapsed = (Date.now() - startTime) / 1000;
-  const p = Math.min(elapsed / 60, 1.0);
-  const m = glassMesh.material;
-  m.roughness = 0.5 * (1 - p);
-  m.transmission = 1.0;
-  m.clearcoatRoughness = 0.3 * (1 - p);
-  m.opacity = 1.0 - p;
-  m.transparent = true;
-  m.needsUpdate = true;
-}
-
-function updateIronGradient() {
-  if (!ironMesh) return;
-  const elapsed = (Date.now() - startTime) / 1000;
-  ironMesh.rotation.y += 0.003;
-  ironMesh.rotation.x += 0.0015;
-}
-
-// === animate ===
+// === アニメーション ===
+let startTime = Date.now();
 function animate() {
   requestAnimationFrame(animate);
 
@@ -210,16 +178,20 @@ function animate() {
     ironMesh.visible = false;
     cubeCamera.update(renderer, scene);
     ironMesh.visible = true;
+
+    ironMesh.rotation.y += 0.003;
+    ironMesh.rotation.x += 0.0015;
   }
 
-  updateIronGradient();
-  updateGlass();
-  updateBackground();
+  bgGroup.children.forEach((ring, i) => {
+    ring.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
+  });
 
   renderer.render(scene, camera);
 }
 animate();
 
+// === リサイズ対応 ===
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
