@@ -257,22 +257,16 @@ function updateGlass() {
 }
 
 
-// === animate 内で CubeCamera 更新 ===
+// === ループ ===
 function animate() {
   requestAnimationFrame(animate);
-
-  // 鉄球を一時的に非表示にして環境キャプチャ
-  ironMesh.visible = false;
-  cubeCamera.update(renderer, scene);
-  ironMesh.visible = true;
-
   updateIronGradient();
   updateGlass();
   updateBackground();
-
+  //controls.update();
   renderer.render(scene, camera);
 }
-
+animate();
 
 // === リサイズ対応 ===
 window.addEventListener("resize", () => {
