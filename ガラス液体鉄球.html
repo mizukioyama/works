@@ -283,10 +283,23 @@ window.addEventListener("resize", () => {
 </body>
 </html>
 
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-// ...
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
+// === ガラスの透明化アニメ ===
+function updateGlass() {
+  if (!glassMesh) return;
+  const elapsed = (Date.now() - startTime) / 1000;
+  const p = Math.min(elapsed / 60, 1.0); // 60秒で透明に
+
+  const m = glassMesh.material;
+  m.roughness = 0.5 * (1 - p);
+  m.transmission = 1.0;                 // 屈折率は常に最大
+  m.clearcoatRoughness = 0.3 * (1 - p);
+
+  // ★ 透明度を徐々に下げる
+  m.opacity = 1.0 - p;                  // 0に近づくほど透明に
+  m.transparent = true;
+
+  m.needsUpdate = true;
+}
 
 
 // === 背景ホログラム風 虹色フレアリング ===
