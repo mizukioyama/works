@@ -128,6 +128,23 @@ const ironMat = new THREE.MeshPhysicalMaterial({
 ironMesh = new THREE.Mesh(ironGeo, ironMat);
 scene.add(ironMesh);
 
+// === animate 内で CubeCamera 更新 ===
+function animate() {
+  requestAnimationFrame(animate);
+
+  // 鉄球を一時的に非表示にして環境キャプチャ
+  ironMesh.visible = false;
+  cubeCamera.update(renderer, scene);
+  ironMesh.visible = true;
+
+  updateIronGradient();
+  updateGlass();
+  updateBackground();
+
+  renderer.render(scene, camera);
+}
+
+
 // === HDRI（鉄球とガラス球の反射用） ===
 new RGBELoader()
   .setPath("https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/")
