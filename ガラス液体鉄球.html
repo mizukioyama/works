@@ -283,59 +283,64 @@ window.addEventListener("resize", () => {
 </body>
 </html>
 
-// === ガラスの透明化アニメ ===
-function updateGlass() {
-  if (!glassMesh) return;
-  const elapsed = (Date.now() - startTime) / 1000;
-  const p = Math.min(elapsed / 60, 1.0); // 60秒で透明に
-
-  const m = glassMesh.material;
-  m.roughness = 0.5 * (1 - p);
-  m.transmission = 1.0;                 // 屈折率は常に最大
-  m.clearcoatRoughness = 0.3 * (1 - p);
-
-  // ★ 透明度を徐々に下げる
-  m.opacity = 1.0 - p;                  // 0に近づくほど透明に
-  m.transparent = true;
-
-  m.needsUpdate = true;
+// === フレアリング作成（RingGeometryに変更） ===
+function createFlareRing(inner, outer) {
+  const geo = new THREE.RingGeometry(inner, outer, 128);
+  const mat = new THREE.MeshBasicMaterial({
+    map: createRainbowFlareTexture(),
+    transparent: true,
+    opacity: 0.6,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  return mesh;
 }
 
-
-// === 背景ホログラム風 虹色フレアリング ===
+// === 背景フレア配置 ===
 const bgGroup = new THREE.Group();
 scene.add(bgGroup);
 
-function createBlurredRing(inner, outer, hue) {
-  const geo = new THREE.RingGeometry(inner, outer, 256);
-  const mat = new THREE.MeshBasicMaterial({
-    color: new THREE.Color(`hsl(${hue},100%,60%)`),
-    transparent: true,
-    opacity: 0.18,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending
-  });
-  return new THREE.Mesh(geo, mat);
-}
-
-function addBlurredRing(inner, outer, baseHue) {
-  const group = new THREE.Group();
-  for (let i = 0; i < 8; i++) {
-    const offset = i * 0.01;
-    const hue = (baseHue + i * 25) % 360;
-    const ring = createBlurredRing(inner - offset, outer + offset, hue);
-    group.add(ring);
-  }
-  return group;
-}
-
-// ガラス球の外側 ≒ 半径1.0、鉄球 ≒ 0.3
-// その中間（0.6〜0.9あたり）に配置
 for (let i = 0; i < 5; i++) {
-  const inner = 0.65 + i * 0.05;
-  const outer = inner + 0.025; // 細めリング
-  const hue = (i * 60) % 360;
-  const blurredRing = addBlurredRing(inner, outer, hue);
-  blurredRing.position.z = -0.01 * i; // ほぼ同じ奥行きに配置
-  bgGroup.add(blurredRing);
+  const ring = createFlareRing(0.6 + i * 0.02, 0.7 + i * 0.02);
+  ring.rotation.x = Math.PI / 2; // XY平面に配置
+  bgGroup.add(ring);
+}
+
+// === CubeCameraを追加（鉄球反射用） ===
+const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256, {
+  type: THREE.HalfFloatType,
+  generateMipmaps: true,
+  minFilter: THREE.LinearMipmapLinearFilter
+});
+const cubeCamera = new THREE.CubeCamera(0.1, 10, cubeRenderTarget);
+scene.add(cubeCamera);
+
+// === 鉄球のマテリアルに envMap を設定 ===
+const ironMat = new THREE.MeshPhysicalMaterial({
+  metalness: 1.0,
+  roughness: 0.05,
+  envMap: cubeRenderTarget.texture,
+  envMapIntensity: 1.5,
+  clearcoat: 1.0,
+  clearcoatRoughness: 0.05
+});
+ironMesh = new THREE.Mesh(ironGeo, ironMat);
+scene.add(ironMesh);
+
+// === animate 内で CubeCamera 更新 ===
+function animate() {
+  requestAnimationFrame(animate);
+
+  // 鉄球を一時的に非表示にして環境キャプチャ
+  ironMesh.visible = false;
+  cubeCamera.update(renderer, scene);
+  ironMesh.visible = true;
+
+  updateIronGradient();
+  updateGlass();
+  updateBackground();
+
+  renderer.render(scene, camera);
 }
