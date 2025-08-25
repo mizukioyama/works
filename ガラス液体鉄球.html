@@ -283,49 +283,66 @@ window.addEventListener("resize", () => {
 </body>
 </html>
 
-// === 背景リング アニメーション ===
-function updateBackground() {
-  const t = (Date.now() - startTime) / 1000;
-  bgGroup.children.forEach((group, i) => {
-    group.children.forEach((ring, j) => {
--     const hueShift = (i * 40 + j * 15 + t * 40) % 360;
--     ring.material.color.setHSL(hueShift / 360, 1, 0.65);
--
--     // 透明度をわずかに揺らす（フレア感アップ）
--     ring.material.opacity = 0.05 + 0.05 * Math.sin(t * 2 + i + j);
-// 虹色フレア：時間で色相を回す
-const hueShift = (t * 20 + i * 45 + j * 15) % 360;
-ring.material.color.setHSL(hueShift / 360, 1.0, 0.6);
-// フレア感の揺らぎ（透明度変化）
-  ring.material.opacity = 0.1 + 0.05 * Math.sin(t * 2 + i + j);
-});
+// === グラデーションテクスチャ生成（虹色フレア） ===
+function createRainbowFlareTexture(size = 512) {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d");
 
--   // ゆるやかに拡縮させて呼吸感
--   const pulse = 1 + 0.05 * Math.sin(t + i);
--   group.scale.set(pulse, pulse, 1);
--
--   // ゆっくり回転
--   group.rotation.z += 0.0003 * (i % 2 === 0 ? 1 : -1);
-// 拡縮はやめて回転のみ
-group.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
-});
+  const radius = size / 2;
+  const gradient = ctx.createConicGradient(0, radius, radius);
+
+  // 虹色をグラデーションで配置
+  gradient.addColorStop(0.0, "red");
+  gradient.addColorStop(0.16, "orange");
+  gradient.addColorStop(0.33, "yellow");
+  gradient.addColorStop(0.5, "green");
+  gradient.addColorStop(0.66, "cyan");
+  gradient.addColorStop(0.83, "blue");
+  gradient.addColorStop(1.0, "magenta");
+
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(radius, radius, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ぼかしマスク（中心透明 → 外周も透明、リングだけ残す）
+  const mask = ctx.createRadialGradient(radius, radius, radius * 0.7, radius, radius, radius);
+  mask.addColorStop(0, "rgba(0,0,0,0)");
+  mask.addColorStop(0.7, "rgba(0,0,0,1)");
+  mask.addColorStop(1, "rgba(0,0,0,0)");
+
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.fillStyle = mask;
+  ctx.fillRect(0, 0, size, size);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
 }
 
-
-// === 背景リング アニメーション ===
-function updateBackground() {
-  const t = (Date.now() - startTime) / 1000;
-  bgGroup.children.forEach((group, i) => {
-    group.children.forEach((ring, j) => {
-      // 虹色フレア：時間で色相を回す
-      const hueShift = (t * 20 + i * 45 + j * 15) % 360;
-      ring.material.color.setHSL(hueShift / 360, 1.0, 0.6);
-
-      // フレア感の揺らぎ（透明度変化）
-      ring.material.opacity = 0.1 + 0.05 * Math.sin(t * 2 + i + j);
-    });
-
-    // 回転のみ（交互に逆方向）
-    group.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
+// === フレアリング作成 ===
+function createFlareRing(radius, thickness) {
+  const geo = new THREE.PlaneGeometry(radius * 2, radius * 2, 1, 1);
+  const mat = new THREE.MeshBasicMaterial({
+    map: createRainbowFlareTexture(),
+    transparent: true,
+    opacity: 0.5,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    depthWrite: false
   });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.scale.set(1, 1, 1);
+  return mesh;
+}
+
+// === 背景フレア配置 ===
+const bgGroup = new THREE.Group();
+scene.add(bgGroup);
+
+for (let i = 0; i < 6; i++) {
+  const ring = createFlareRing(2 + i * 0.5, 0.1);
+  ring.position.z = -i * 0.3;
+  bgGroup.add(ring);
 }

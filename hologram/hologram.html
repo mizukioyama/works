@@ -44,42 +44,67 @@ const key = new THREE.DirectionalLight(0xffffff, 1.2);
 key.position.set(3, 4, 5);
 scene.add(key);
 
-// === 背景ホログラム風 虹色フレアリング ===
+// === 虹色フレアリング用 CanvasTexture ===
+function createRainbowFlareTexture(size = 512) {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d");
+
+  const r = size / 2;
+
+  // 虹色の円環
+  const gradient = ctx.createConicGradient(0, r, r);
+  gradient.addColorStop(0.0, "red");
+  gradient.addColorStop(0.16, "orange");
+  gradient.addColorStop(0.33, "yellow");
+  gradient.addColorStop(0.5, "green");
+  gradient.addColorStop(0.66, "cyan");
+  gradient.addColorStop(0.83, "blue");
+  gradient.addColorStop(1.0, "magenta");
+
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(r, r, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 内側透明・外側もフェード → リングだけ残す
+  const mask = ctx.createRadialGradient(r, r, r * 0.6, r, r, r);
+  mask.addColorStop(0, "rgba(0,0,0,0)");
+  mask.addColorStop(0.7, "rgba(0,0,0,1)");
+  mask.addColorStop(1, "rgba(0,0,0,0)");
+
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.fillStyle = mask;
+  ctx.fillRect(0, 0, size, size);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// === フレアリング作成 ===
+function createFlareRing(radius) {
+  const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
+  const mat = new THREE.MeshBasicMaterial({
+    map: createRainbowFlareTexture(),
+    transparent: true,
+    opacity: 0.5,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  return mesh;
+}
+
+// === 背景フレア配置 ===
 const bgGroup = new THREE.Group();
 scene.add(bgGroup);
 
-function createBlurredRing(inner, outer, hue) {
-  const geo = new THREE.RingGeometry(inner, outer, 256); // 分割数↑で滑らかに
-  const mat = new THREE.MeshBasicMaterial({
-    color: new THREE.Color(`hsl(${hue},100%,60%)`),
-    transparent: true,
-    opacity: 0.15, // ← もう少し濃く
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending
-  });
-  return new THREE.Mesh(geo, mat);
-}
-
-// 複数レイヤーでぼかしを再現
-function addBlurredRing(inner, outer, baseHue) {
-  const group = new THREE.Group();
-  for (let i = 0; i < 8; i++) {  // ← リング枚数増やす
-    const offset = i * 0.015;    // ← ずらし幅を大きく
-    const hue = (baseHue + i * 20) % 360;
-    const ring = createBlurredRing(inner - offset, outer + offset, hue);
-    group.add(ring);
-  }
-  return group;
-}
-
-// 複数の虹色リングを奥行き配置
-for (let i = 0; i < 8; i++) {
-  const inner = i * 0.4 + 1.2;
-  const outer = inner + 0.03; // 細め
-  const hue = (i * 45) % 360;
-  const blurredRing = addBlurredRing(inner, outer, hue);
-  blurredRing.position.z = -i * 0.4;
-  bgGroup.add(blurredRing);
+for (let i = 0; i < 6; i++) {
+  const ring = createFlareRing(2 + i * 0.6);
+  ring.position.z = -i * 0.4;
+  bgGroup.add(ring);
 }
 
 // === HDRI（鉄球とガラス球の反射用） ===
@@ -95,15 +120,11 @@ new RGBELoader()
 // === 背景フレア アニメーション ===
 function updateBackground() {
   const t = (Date.now() - startTime) / 1000;
-  bgGroup.children.forEach((group, i) => {
-    group.children.forEach((ring, j) => {
-      const hueShift = (i * 40 + j * 20 + t * 40) % 360;
-      ring.material.color.setHSL(hueShift / 360, 1, 0.65);
-      ring.material.opacity = 0.04 + 0.04 * Math.sin(t * 2 + i + j);
-    });
-    const pulse = 1 + 0.05 * Math.sin(t + i);
-    group.scale.set(pulse, pulse, 1);
-    group.rotation.z += 0.0003 * (i % 2 === 0 ? 1 : -1);
+  bgGroup.children.forEach((ring, i) => {
+    // 交互に回転
+    ring.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
+    // 透明度を揺らす
+    ring.material.opacity = 0.25 + 0.2 * Math.sin(t * 2 + i);
   });
 }
 
