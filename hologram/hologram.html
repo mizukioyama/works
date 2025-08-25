@@ -82,13 +82,13 @@ function createRainbowFlareTexture(size = 512) {
   return tex;
 }
 
-// === フレアリング作成（RingGeometryに変更） ===
-function createFlareRing(inner, outer) {
-  const geo = new THREE.RingGeometry(inner, outer, 128);
+// === フレアリング作成 ===
+function createFlareRing(radius) {
+  const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
   const mat = new THREE.MeshBasicMaterial({
     map: createRainbowFlareTexture(),
     transparent: true,
-    opacity: 0.6,
+    opacity: 0.45,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
@@ -97,53 +97,15 @@ function createFlareRing(inner, outer) {
   return mesh;
 }
 
-// === 背景フレア配置 ===
+// === 背景フレア配置（ガラス球と鉄球の中間サイズ ≒ 半径0.6〜0.9） ===
 const bgGroup = new THREE.Group();
 scene.add(bgGroup);
 
 for (let i = 0; i < 5; i++) {
-  const ring = createFlareRing(0.6 + i * 0.02, 0.7 + i * 0.02);
-  ring.rotation.x = Math.PI / 2; // XY平面に配置
+  const ring = createFlareRing(0.65 + i * 0.06); // 0.65〜0.9程度
+  ring.position.z = -0.01 * i; // ほぼ同じ平面上に配置
   bgGroup.add(ring);
 }
-
-// === CubeCameraを追加（鉄球反射用） ===
-const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256, {
-  type: THREE.HalfFloatType,
-  generateMipmaps: true,
-  minFilter: THREE.LinearMipmapLinearFilter
-});
-const cubeCamera = new THREE.CubeCamera(0.1, 10, cubeRenderTarget);
-scene.add(cubeCamera);
-
-// === 鉄球のマテリアルに envMap を設定 ===
-const ironMat = new THREE.MeshPhysicalMaterial({
-  metalness: 1.0,
-  roughness: 0.05,
-  envMap: cubeRenderTarget.texture,
-  envMapIntensity: 1.5,
-  clearcoat: 1.0,
-  clearcoatRoughness: 0.05
-});
-ironMesh = new THREE.Mesh(ironGeo, ironMat);
-scene.add(ironMesh);
-
-// === animate 内で CubeCamera 更新 ===
-function animate() {
-  requestAnimationFrame(animate);
-
-  // 鉄球を一時的に非表示にして環境キャプチャ
-  ironMesh.visible = false;
-  cubeCamera.update(renderer, scene);
-  ironMesh.visible = true;
-
-  updateIronGradient();
-  updateGlass();
-  updateBackground();
-
-  renderer.render(scene, camera);
-}
-
 
 // === HDRI（鉄球とガラス球の反射用） ===
 new RGBELoader()
@@ -259,20 +221,15 @@ function updateIronGradient() {
 function updateGlass() {
   if (!glassMesh) return;
   const elapsed = (Date.now() - startTime) / 1000;
-  const p = Math.min(elapsed / 60, 1.0); // 60秒で透明に
-
+  const p = Math.min(elapsed / 60, 1.0);
   const m = glassMesh.material;
   m.roughness = 0.5 * (1 - p);
-  m.transmission = 1.0;                 // 屈折率は常に最大
+  //m.transmission = 0.5 + 0.5 * p;
+  // 常に透過最大
+  m.transmission = 1.0;
   m.clearcoatRoughness = 0.3 * (1 - p);
-
-  // ★ 透明度を徐々に下げる
-  m.opacity = 1.0 - p;                  // 0に近づくほど透明に
-  m.transparent = true;
-
   m.needsUpdate = true;
 }
-
 
 // === ループ ===
 function animate() {
