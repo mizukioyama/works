@@ -67,8 +67,8 @@ function createRainbowFlareTexture(size = 512) {
   ctx.arc(r, r, r, 0, Math.PI * 2);
   ctx.fill();
 
-  // 内側透明・外側もフェード → リングだけ残す
-  const mask = ctx.createRadialGradient(r, r, r * 0.6, r, r, r);
+  // 内側透明・外側もフェード
+  const mask = ctx.createRadialGradient(r, r, r * 0.55, r, r, r);
   mask.addColorStop(0, "rgba(0,0,0,0)");
   mask.addColorStop(0.7, "rgba(0,0,0,1)");
   mask.addColorStop(1, "rgba(0,0,0,0)");
@@ -88,7 +88,7 @@ function createFlareRing(radius) {
   const mat = new THREE.MeshBasicMaterial({
     map: createRainbowFlareTexture(),
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.45,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
@@ -97,13 +97,13 @@ function createFlareRing(radius) {
   return mesh;
 }
 
-// === 背景フレア配置 ===
+// === 背景フレア配置（ガラス球と鉄球の中間サイズ ≒ 半径0.6〜0.9） ===
 const bgGroup = new THREE.Group();
 scene.add(bgGroup);
 
-for (let i = 0; i < 6; i++) {
-  const ring = createFlareRing(2 + i * 0.6);
-  ring.position.z = -i * 0.4;
+for (let i = 0; i < 5; i++) {
+  const ring = createFlareRing(0.65 + i * 0.06); // 0.65〜0.9程度
+  ring.position.z = -0.01 * i; // ほぼ同じ平面上に配置
   bgGroup.add(ring);
 }
 
@@ -121,10 +121,8 @@ new RGBELoader()
 function updateBackground() {
   const t = (Date.now() - startTime) / 1000;
   bgGroup.children.forEach((ring, i) => {
-    // 交互に回転
-    ring.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
-    // 透明度を揺らす
-    ring.material.opacity = 0.25 + 0.2 * Math.sin(t * 2 + i);
+    ring.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1); // 交互に回転
+    ring.material.opacity = 0.2 + 0.15 * Math.sin(t * 2 + i);
   });
 }
 

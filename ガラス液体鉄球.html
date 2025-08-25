@@ -283,66 +283,40 @@ window.addEventListener("resize", () => {
 </body>
 </html>
 
-// === グラデーションテクスチャ生成（虹色フレア） ===
-function createRainbowFlareTexture(size = 512) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d");
-
-  const radius = size / 2;
-  const gradient = ctx.createConicGradient(0, radius, radius);
-
-  // 虹色をグラデーションで配置
-  gradient.addColorStop(0.0, "red");
-  gradient.addColorStop(0.16, "orange");
-  gradient.addColorStop(0.33, "yellow");
-  gradient.addColorStop(0.5, "green");
-  gradient.addColorStop(0.66, "cyan");
-  gradient.addColorStop(0.83, "blue");
-  gradient.addColorStop(1.0, "magenta");
-
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(radius, radius, radius, 0, Math.PI * 2);
-  ctx.fill();
-
-  // ぼかしマスク（中心透明 → 外周も透明、リングだけ残す）
-  const mask = ctx.createRadialGradient(radius, radius, radius * 0.7, radius, radius, radius);
-  mask.addColorStop(0, "rgba(0,0,0,0)");
-  mask.addColorStop(0.7, "rgba(0,0,0,1)");
-  mask.addColorStop(1, "rgba(0,0,0,0)");
-
-  ctx.globalCompositeOperation = "destination-in";
-  ctx.fillStyle = mask;
-  ctx.fillRect(0, 0, size, size);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.needsUpdate = true;
-  return texture;
-}
-
-// === フレアリング作成 ===
-function createFlareRing(radius, thickness) {
-  const geo = new THREE.PlaneGeometry(radius * 2, radius * 2, 1, 1);
-  const mat = new THREE.MeshBasicMaterial({
-    map: createRainbowFlareTexture(),
-    transparent: true,
-    opacity: 0.5,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: false
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.scale.set(1, 1, 1);
-  return mesh;
-}
-
-// === 背景フレア配置 ===
+// === 背景ホログラム風 虹色フレアリング ===
 const bgGroup = new THREE.Group();
 scene.add(bgGroup);
 
-for (let i = 0; i < 6; i++) {
-  const ring = createFlareRing(2 + i * 0.5, 0.1);
-  ring.position.z = -i * 0.3;
-  bgGroup.add(ring);
+function createBlurredRing(inner, outer, hue) {
+  const geo = new THREE.RingGeometry(inner, outer, 256);
+  const mat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(`hsl(${hue},100%,60%)`),
+    transparent: true,
+    opacity: 0.18,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending
+  });
+  return new THREE.Mesh(geo, mat);
+}
+
+function addBlurredRing(inner, outer, baseHue) {
+  const group = new THREE.Group();
+  for (let i = 0; i < 8; i++) {
+    const offset = i * 0.01;
+    const hue = (baseHue + i * 25) % 360;
+    const ring = createBlurredRing(inner - offset, outer + offset, hue);
+    group.add(ring);
+  }
+  return group;
+}
+
+// ガラス球の外側 ≒ 半径1.0、鉄球 ≒ 0.3
+// その中間（0.6〜0.9あたり）に配置
+for (let i = 0; i < 5; i++) {
+  const inner = 0.65 + i * 0.05;
+  const outer = inner + 0.025; // 細めリング
+  const hue = (i * 60) % 360;
+  const blurredRing = addBlurredRing(inner, outer, hue);
+  blurredRing.position.z = -0.01 * i; // ほぼ同じ奥行きに配置
+  bgGroup.add(blurredRing);
 }
