@@ -17,7 +17,7 @@
 <body>
 <script type="module">
 import * as THREE from "three";
-//import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 
 // === 基本セットアップ ===
@@ -225,8 +225,8 @@ function updateGlass() {
   const m = glassMesh.material;
   m.roughness = 0.5 * (1 - p);
   //m.transmission = 0.5 + 0.5 * p;
-  // 常に透過最大
   m.transmission = 1.0;
+  // 常に透過最大
   m.clearcoatRoughness = 0.3 * (1 - p);
   m.needsUpdate = true;
 }
