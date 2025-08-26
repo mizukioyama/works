@@ -236,19 +236,31 @@ function updateIronGradient() {
 function animate() {
   requestAnimationFrame(animate);
 
-  // ★ CubeCamera更新（鉄球の反射に背景リングを映す）
-  ironMesh.visible = false;
-  cubeCamera.update(renderer, scene);
-  ironMesh.visible = true;
+  // 鉄球が存在する時だけ CubeCamera で反射更新
+  if (ironMesh) {
+    ironMesh.visible = false;
+    cubeCamera.update(renderer, scene);
+    ironMesh.visible = true;
+  }
 
   updateIronGradient();
   updateBackground();
   updateGlass();
   controls.update();
-  //renderer.render(scene, camera);
-  composer.render(); // ← renderer.render の代わり
+
+  composer.render(); // ポストプロセス描画
 }
-animate();
+
+function updateGlass() {
+  if (!glassMesh) return;
+  const elapsed = (Date.now() - startTime) / 1000;
+  const p = Math.min(elapsed / 60, 1.0);
+  const m = glassMesh.material;
+  m.roughness = 0.5 * (1 - p);
+  m.transmission = 0.5 + 0.5 * p;
+  m.clearcoatRoughness = 0.3 * (1 - p);
+  m.needsUpdate = true;
+}
 
 // === HDRI環境 + モデル作成 ===
 new RGBELoader()
