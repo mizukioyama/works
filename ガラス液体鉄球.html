@@ -283,32 +283,31 @@ window.addEventListener("resize", () => {
 </body>
 </html>
 
-function animate() {
-  requestAnimationFrame(animate);
-
-  // 鉄球が存在する時だけ CubeCamera で反射更新
-  if (ironMesh) {
-    ironMesh.visible = false;
-    cubeCamera.update(renderer, scene);
-    ironMesh.visible = true;
-  }
-
-  updateIronGradient();
-  updateBackground();
-  updateGlass();
-  controls.update();
-
-  composer.render(); // ポストプロセス描画
+// === フレアリング作成 ===
+function createFlareRing(inner, outer) {
+  const geo = new THREE.RingGeometry(inner, outer, 256);
+  const mat = new THREE.MeshBasicMaterial({
+    map: createRainbowFlareTexture(),
+    transparent: true,
+    opacity: 0.7,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = Math.PI / 2; 
+  return mesh;
 }
 
+// === 背景フレア配置 ===
+const bgGroup = new THREE.Group();
+scene.add(bgGroup);
 
-function updateGlass() {
-  if (!glassMesh) return;
-  const elapsed = (Date.now() - startTime) / 1000;
-  const p = Math.min(elapsed / 60, 1.0);
-  const m = glassMesh.material;
-  m.roughness = 0.5 * (1 - p);
-  m.transmission = 0.5 + 0.5 * p;
-  m.clearcoatRoughness = 0.3 * (1 - p);
-  m.needsUpdate = true;
+// 💡 サイズを大きくしてガラス球の「外側」に出す
+for (let i = 0; i < 4; i++) {
+  const ring = createFlareRing(1.2 + i * 0.15, 1.35 + i * 0.15);
+  bgGroup.add(ring);
 }
+
+// === ループ開始 ===
+animate();
