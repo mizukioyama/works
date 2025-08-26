@@ -19,6 +19,10 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+
 
 // === 基本セットアップ ===
 const scene = new THREE.Scene();
@@ -43,6 +47,19 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 const key = new THREE.DirectionalLight(0xffffff, 1.2);
 key.position.set(3, 4, 5);
 scene.add(key);
+
+// === ポストプロセス（ブルーム） ===
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  1.2,   // 強さ
+  0.6,   // 半径
+  0.0    // しきい値（小さいほど全体にかかる）
+);
+composer.addPass(bloomPass);
+
 
 // === 虹色フレアリング用 CanvasTexture ===
 function createRainbowFlareTexture(size = 512) {
@@ -226,8 +243,10 @@ function animate() {
 
   updateIronGradient();
   updateBackground();
+  updateGlass();
   controls.update();
-  renderer.render(scene, camera);
+  //renderer.render(scene, camera);
+  composer.render(); // ← renderer.render の代わり
 }
 animate();
 
@@ -246,7 +265,9 @@ window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
 });
+
 </script>
 </body>
 </html>
