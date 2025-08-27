@@ -2,7 +2,9 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>鉄球オーラ表現</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>鉄球オーラグロー</title>
+
 <script type="importmap">
 {
   "imports": {
@@ -40,10 +42,12 @@ document.body.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-// === 環境光 ===
+// === 環境 ===
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
-scene.add(new THREE.AmbientLight(0xffffff,0.5));
+
+// === 光源 ===
+scene.add(new THREE.AmbientLight(0xffffff,0.4));
 const dir = new THREE.DirectionalLight(0xffffff,1.2);
 dir.position.set(3,3,5);
 scene.add(dir);
@@ -74,41 +78,42 @@ const ironMat = new THREE.MeshPhysicalMaterial({
 const ironMesh = new THREE.Mesh(new THREE.SphereGeometry(0.3,128,128), ironMat);
 scene.add(ironMesh);
 
-// === オーラ（鉄球の周囲のグロー） ===
-const auraGeo = new THREE.SphereGeometry(0.45, 64, 64);
-const auraMat = new THREE.ShaderMaterial({
-  transparent: true,
-  blending: THREE.AdditiveBlending,
-  side: THREE.BackSide,
-  uniforms: {
-    time: { value: 0.0 }
-  },
-  vertexShader: `
-    varying vec3 vPos;
-    void main() {
-      vPos = position;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform float time;
-    varying vec3 vPos;
-    void main() {
-      float intensity = 0.6 + 0.4*sin(length(vPos)*5.0 - time*2.0);
-      vec3 color = vec3(0.5 + 0.5*sin(time+vPos.x*3.0),
-                        0.5 + 0.5*sin(time+vPos.y*3.0+2.0),
-                        0.5 + 0.5*sin(time+vPos.z*3.0+4.0));
-      gl_FragColor = vec4(color * intensity, 0.6);
-    }
-  `
-});
-const auraMesh = new THREE.Mesh(auraGeo, auraMat);
-ironMesh.add(auraMesh); // 鉄球にまとわりつくように追加
+// === オーラ的リング（鉄球の周囲） ===
+function createAuraRing(radius, thickness){
+  const geo = new THREE.RingGeometry(radius, radius+thickness, 128);
+  const colors = [];
+  const pos = geo.attributes.position;
+  for (let i=0; i<pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i);
+    const angle = (Math.atan2(y,x) + Math.PI)/(2*Math.PI);
+    const c = new THREE.Color();
+    c.setHSL(angle,1.0,0.5);
+    colors.push(c.r,c.g,c.b);
+  }
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(colors,3));
+  const mat = new THREE.MeshBasicMaterial({
+    vertexColors:true,
+    side:THREE.DoubleSide,
+    transparent:true,
+    opacity:0.7,
+    blending:THREE.AdditiveBlending
+  });
+  const ring = new THREE.Mesh(geo, mat);
+  return ring;
+}
+
+const auraGroup = new THREE.Group();
+const aura1 = createAuraRing(0.45,0.08);
+const aura2 = createAuraRing(0.6,0.08);
+aura1.rotation.x = Math.PI/2;
+aura2.rotation.y = Math.PI/2;
+auraGroup.add(aura1,aura2);
+scene.add(auraGroup);
 
 // === Bloomエフェクト ===
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene,camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 1.5, 0.4, 0.85);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 1.5, 0.6, 0.85);
 composer.addPass(bloomPass);
 
 // === 時間管理 ===
@@ -120,17 +125,19 @@ function animate(){
   const elapsed = (Date.now()-startTime)/1000;
 
   // 鉄球回転
-  ironMesh.rotation.y += 0.002;
+  ironMesh.rotation.y += 0.003;
   ironMesh.rotation.x += 0.001;
 
-  // ガラス球の透明化（60秒で透明）
+  // ガラス球の透明化（60秒で透明に）
   const p = Math.min(elapsed/60,1);
   glassMat.roughness = 0.5*(1-p);
   glassMat.transmission = 0.5+0.5*p;
   glassMat.clearcoatRoughness = 0.3*(1-p);
+  glassMat.opacity = 1.0-p; // 最後は完全に消える
 
-  // オーラの時間更新
-  auraMat.uniforms.time.value = elapsed;
+  // オーラ回転
+  aura1.rotation.z += 0.002;
+  aura2.rotation.z -= 0.0015;
 
   controls.update();
   composer.render();
