@@ -17,7 +17,7 @@
 <body>
 <script type="module">
 import * as THREE from "three";
-//import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 
 // === 基本セットアップ ===
@@ -28,15 +28,15 @@ camera.position.set(0, 0, 4);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0xf0f0f0); // 白〜グレー背景
+renderer.setClearColor(0xf0f0f0);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 // === コントロール ===
-//const controls = new OrbitControls(camera, renderer.domElement);
-//controls.enableDamping = true;
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
 
 // === ライト ===
 scene.add(new THREE.AmbientLight(0xffffff, 0.4));
@@ -49,7 +49,6 @@ function createRainbowFlareTexture(size = 512) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext("2d");
-
   const r = size / 2;
 
   // 虹色の円環
@@ -67,12 +66,11 @@ function createRainbowFlareTexture(size = 512) {
   ctx.arc(r, r, r, 0, Math.PI * 2);
   ctx.fill();
 
-  // 内側透明・外側もフェード
-  const mask = ctx.createRadialGradient(r, r, r * 0.55, r, r, r);
+  // 内外フェード
+  const mask = ctx.createRadialGradient(r, r, r * 0.5, r, r, r);
   mask.addColorStop(0, "rgba(0,0,0,0)");
   mask.addColorStop(0.7, "rgba(0,0,0,1)");
   mask.addColorStop(1, "rgba(0,0,0,0)");
-
   ctx.globalCompositeOperation = "destination-in";
   ctx.fillStyle = mask;
   ctx.fillRect(0, 0, size, size);
@@ -82,18 +80,19 @@ function createRainbowFlareTexture(size = 512) {
   return tex;
 }
 
-// === フレアリング作成（RingGeometryに変更） ===
+// === フレアリング作成 ===
 function createFlareRing(inner, outer) {
   const geo = new THREE.RingGeometry(inner, outer, 128);
   const mat = new THREE.MeshBasicMaterial({
     map: createRainbowFlareTexture(),
     transparent: true,
-    opacity: 0.6,
+    opacity: 0.5,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
   });
   const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = Math.PI / 2; // カメラ正面に
   return mesh;
 }
 
@@ -101,13 +100,12 @@ function createFlareRing(inner, outer) {
 const bgGroup = new THREE.Group();
 scene.add(bgGroup);
 
-for (let i = 0; i < 5; i++) {
-  const ring = createFlareRing(0.6 + i * 0.02, 0.7 + i * 0.02);
-  ring.rotation.x = Math.PI / 2; // XY平面に配置
+for (let i = 0; i < 4; i++) {
+  const ring = createFlareRing(0.6 + i * 0.05, 0.65 + i * 0.05);
   bgGroup.add(ring);
 }
 
-// === CubeCameraを追加（鉄球反射用） ===
+// === CubeCamera（鉄球への反射用） ===
 const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256, {
   type: THREE.HalfFloatType,
   generateMipmaps: true,
@@ -116,38 +114,7 @@ const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256, {
 const cubeCamera = new THREE.CubeCamera(0.1, 10, cubeRenderTarget);
 scene.add(cubeCamera);
 
-// === 鉄球のマテリアルに envMap を設定 ===
-const ironMat = new THREE.MeshPhysicalMaterial({
-  metalness: 1.0,
-  roughness: 0.05,
-  envMap: cubeRenderTarget.texture,
-  envMapIntensity: 1.5,
-  clearcoat: 1.0,
-  clearcoatRoughness: 0.05
-});
-ironMesh = new THREE.Mesh(ironGeo, ironMat);
-scene.add(ironMesh);
-
-// === HDRI（鉄球とガラス球の反射用） ===
-new RGBELoader()
-  .setPath("https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/")
-  .load("royal_esplanade_1k.hdr", (tex) => {
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    scene.environment = tex;
-    createGlassSphere();
-    createIronSphere();
-  });
-
-// === 背景フレア アニメーション ===
-function updateBackground() {
-  const t = (Date.now() - startTime) / 1000;
-  bgGroup.children.forEach((ring, i) => {
-    ring.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1); // 交互に回転
-    ring.material.opacity = 0.2 + 0.15 * Math.sin(t * 2 + i);
-  });
-}
-
-// === ガラス球（60秒でクリア化） ===
+// === ガラス球 ===
 let glassMesh;
 function createGlassSphere() {
   const geo = new THREE.SphereGeometry(1, 64, 64);
@@ -196,7 +163,8 @@ function createIronSphere() {
     vertexColors: true,
     metalness: 1.0,
     roughness: 0.08,
-    envMapIntensity: 1.8,
+    envMap: cubeRenderTarget.texture,   // ★ CubeCameraを反射に使用
+    envMapIntensity: 1.5,
     clearcoat: 1.0,
     clearcoatRoughness: 0.03
   });
@@ -205,7 +173,16 @@ function createIronSphere() {
   scene.add(ironMesh);
 }
 
-// === 鉄球の2色グラデ切替 ===
+// === 背景フレア アニメーション ===
+function updateBackground() {
+  const t = (Date.now() - startTime) / 1000;
+  bgGroup.children.forEach((ring, i) => {
+    ring.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
+    ring.material.opacity = 0.25 + 0.15 * Math.sin(t * 2 + i);
+  });
+}
+
+// === 鉄球グラデーション ===
 const PAIRS = [
   [ new THREE.Color(1, 0, 0), new THREE.Color(1, 1, 1) ],
   [ new THREE.Color(0, 0, 1), new THREE.Color(1, 1, 1) ],
@@ -238,41 +215,31 @@ function updateIronGradient() {
   ironMesh.rotation.x += 0.0015;
 }
 
-// === ガラスの透明化アニメ ===
-function updateGlass() {
-  if (!glassMesh) return;
-  const elapsed = (Date.now() - startTime) / 1000;
-  const p = Math.min(elapsed / 60, 1.0); // 60秒で透明に
-
-  const m = glassMesh.material;
-  m.roughness = 0.5 * (1 - p);
-  m.transmission = 1.0;                 // 屈折率は常に最大
-  m.clearcoatRoughness = 0.3 * (1 - p);
-
-  // ★ 透明度を徐々に下げる
-  m.opacity = 1.0 - p;                  // 0に近づくほど透明に
-  m.transparent = true;
-
-  m.needsUpdate = true;
-}
-
-
-// === animate 内で CubeCamera 更新 ===
+// === ループ ===
 function animate() {
   requestAnimationFrame(animate);
 
-  // 鉄球を一時的に非表示にして環境キャプチャ
+  // ★ CubeCamera更新（鉄球の反射に背景リングを映す）
   ironMesh.visible = false;
   cubeCamera.update(renderer, scene);
   ironMesh.visible = true;
 
   updateIronGradient();
-  updateGlass();
   updateBackground();
-
+  controls.update();
   renderer.render(scene, camera);
 }
+animate();
 
+// === HDRI環境 + モデル作成 ===
+new RGBELoader()
+  .setPath("https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/")
+  .load("royal_esplanade_1k.hdr", (tex) => {
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    scene.environment = tex;
+    createGlassSphere();
+    createIronSphere();
+  });
 
 // === リサイズ対応 ===
 window.addEventListener("resize", () => {
