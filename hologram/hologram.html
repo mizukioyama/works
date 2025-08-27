@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>メタリック鉄球＋ガラス球＋虹色フレア背景（安定版）</title>
+<title>ガラス球＋鉄球＋虹色リング</title>
 
 <script type="importmap">
 {
@@ -26,30 +26,27 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 // === 基本セットアップ ===
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 100);
 camera.position.set(0, 0, 4);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0xf0f0f0);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.2;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-// === 物理ベース環境（通信不要の反射環境） ===
+// === 環境光 ===
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
-
-// === ライト ===
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-const key = new THREE.DirectionalLight(0xffffff, 1.2);
-key.position.set(3, 4, 5);
-scene.add(key);
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+dir.position.set(3,3,5);
+scene.add(dir);
 
 // === ガラス球 ===
 const glassMesh = new THREE.Mesh(
@@ -57,12 +54,12 @@ const glassMesh = new THREE.Mesh(
   new THREE.MeshPhysicalMaterial({
     transmission: 0.7,
     transparent: true,
-    roughness: 0.2,
+    roughness: 0.15,
     metalness: 0.0,
     ior: 1.5,
     thickness: 0.6,
     clearcoat: 1.0,
-    clearcoatRoughness: 0.15
+    clearcoatRoughness: 0.1
   })
 );
 scene.add(glassMesh);
@@ -82,22 +79,22 @@ const ironMesh = new THREE.Mesh(
 );
 scene.add(ironMesh);
 
-// === オーラ（Fresnel）— 鉄球の周囲ににじむグロー ===
+// === オーラ（鉄球周囲のグロー） ===
 const auraMaterial = new THREE.ShaderMaterial({
   transparent: true,
   depthWrite: false,
   blending: THREE.AdditiveBlending,
   uniforms: {
-    uColor: { value: new THREE.Color(0x66ccff) },  // お好みで
+    uColor: { value: new THREE.Color(0x66ccff) },
     uIntensity: { value: 0.8 },
     uPower: { value: 2.2 }
   },
   vertexShader: `
     varying vec3 vWorldPos;
     varying vec3 vNormal;
-    void main() {
+    void main(){
       vNormal = normalize(normalMatrix * normal);
-      vec4 wp = modelMatrix * vec4(position, 1.0);
+      vec4 wp = modelMatrix * vec4(position,1.0);
       vWorldPos = wp.xyz;
       gl_Position = projectionMatrix * viewMatrix * wp;
     }
@@ -108,7 +105,7 @@ const auraMaterial = new THREE.ShaderMaterial({
     uniform vec3 uColor;
     uniform float uIntensity;
     uniform float uPower;
-    void main() {
+    void main(){
       vec3 V = normalize(cameraPosition - vWorldPos);
       float fres = pow(1.0 - max(dot(normalize(vNormal), V), 0.0), uPower);
       gl_FragColor = vec4(uColor, fres * uIntensity);
@@ -121,80 +118,52 @@ const auraMesh = new THREE.Mesh(
 );
 scene.add(auraMesh);
 
-// === 虹色フレア（背景リング：シェーダで生成） ===
-// 画面全体を覆うサイズの板を奥に配置
-const ringPlane = new THREE.Mesh(
-  new THREE.PlaneGeometry(10, 10, 1, 1),
-  new THREE.ShaderMaterial({
+// === 背景リング（虹色のフレアリング） ===
+function createRainbowRing(innerR=1.2, outerR=1.4) {
+  const geo = new THREE.RingGeometry(innerR, outerR, 128);
+  const colors = [];
+  const pos = geo.attributes.position;
+  for (let i=0; i<pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i);
+    const angle = (Math.atan2(y,x) + Math.PI) / (2*Math.PI);
+    const color = new THREE.Color();
+    color.setHSL(angle, 1.0, 0.5);
+    colors.push(color.r, color.g, color.b);
+  }
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+
+  const mat = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    side: THREE.DoubleSide,
     transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    uniforms: {
-      uInner: { value: 0.55 },   // 内径（0〜1）
-      uOuter: { value: 0.90 },   // 外径（0〜1）
-      uFeather: { value: 0.03 }, // フェザー幅
-      uAspect: { value: window.innerWidth / window.innerHeight },
-      uTime: { value: 0.0 },
-      uOpacity: { value: 0.85 }
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      varying vec2 vUv;
-      uniform float uInner, uOuter, uFeather, uAspect, uTime, uOpacity;
+    opacity: 0.65,
+    blending: THREE.AdditiveBlending
+  });
 
-      // HSL -> RGB
-      vec3 hsl2rgb(vec3 c){
-        vec3 rgb = clamp( abs(mod(c.x*6.0 + vec3(0.0,4.0,2.0), 6.0)-3.0)-1.0, 0.0, 1.0 );
-        return c.z + c.y*(rgb-0.5)*(1.0-abs(2.0*c.z-1.0));
-      }
-      void main() {
-        // 中心化＆アスペクト補正
-        vec2 p = vUv * 2.0 - 1.0;
-        p.x *= uAspect;
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = Math.PI/2;
+  return mesh;
+}
 
-        float r = length(p);
-        float a = atan(p.y, p.x); // -PI..PI
-        float hue = fract(a / (6.2831853) + 0.5 + uTime * 0.02); // ゆっくり回転
-        vec3 col = hsl2rgb(vec3(hue, 1.0, 0.5));
-
-        // リングのアルファ（柔らかい内外フチ）
-        float innerEdge = smoothstep(uInner, uInner + uFeather, r);
-        float outerEdge = 1.0 - smoothstep(uOuter - uFeather, uOuter, r);
-        float alpha = innerEdge * outerEdge;
-
-        // 外側にもう一段フェード
-        alpha *= (1.0 - smoothstep(uOuter, uOuter + 0.15, r));
-
-        gl_FragColor = vec4(col, alpha * uOpacity);
-      }
-    `
-  })
-);
-ringPlane.position.z = -0.8;
-scene.add(ringPlane);
+const rainbowRing1 = createRainbowRing(1.25, 1.5);
+const rainbowRing2 = createRainbowRing(1.55, 1.8);
+scene.add(rainbowRing1);
+scene.add(rainbowRing2);
 
 // === アニメーション ===
-const start = performance.now();
-function animate(now = performance.now()) {
+function animate(t) {
   requestAnimationFrame(animate);
 
-  const t = (now - start) / 1000;
+  // 鉄球回転
+  ironMesh.rotation.y = t*0.0003;
+  ironMesh.rotation.x = t*0.00015;
 
-  // 鉄球のゆっくり回転
-  ironMesh.rotation.y = t * 0.3;
-  ironMesh.rotation.x = t * 0.15;
-
-  // オーラ球は鉄球に追従
+  // オーラ追従
   auraMesh.position.copy(ironMesh.position);
 
-  // 背景リングのわずかな色回転
-  ringPlane.material.uniforms.uTime.value = t;
+  // 虹色リングの回転（交互方向）
+  rainbowRing1.rotation.z = t*0.0004;
+  rainbowRing2.rotation.z = -t*0.0003;
 
   controls.update();
   renderer.render(scene, camera);
@@ -202,12 +171,11 @@ function animate(now = performance.now()) {
 animate();
 
 // === リサイズ ===
-window.addEventListener("resize", () => {
-  const w = window.innerWidth, h = window.innerHeight;
-  camera.aspect = w / h;
+window.addEventListener("resize", ()=>{
+  const w=window.innerWidth, h=window.innerHeight;
+  camera.aspect = w/h;
   camera.updateProjectionMatrix();
-  renderer.setSize(w, h);
-  ringPlane.material.uniforms.uAspect.value = w / h;
+  renderer.setSize(w,h);
 });
 </script>
 </body>
