@@ -14,7 +14,7 @@
 }
 </script>
 <style>
-  body { margin:0; background:#111; overflow:hidden; }
+  body { margin:0; background:#ddd; overflow:hidden; }  /* ← 白/灰色背景 */
   canvas { display:block; }
 </style>
 </head>
@@ -47,8 +47,8 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
 
 // === 光源 ===
-scene.add(new THREE.AmbientLight(0xffffff,0.4));
-const dir = new THREE.DirectionalLight(0xffffff,1.2);
+scene.add(new THREE.AmbientLight(0xffffff,0.6));
+const dir = new THREE.DirectionalLight(0xffffff,1.0);
 dir.position.set(3,3,5);
 scene.add(dir);
 
@@ -78,16 +78,16 @@ const ironMat = new THREE.MeshPhysicalMaterial({
 const ironMesh = new THREE.Mesh(new THREE.SphereGeometry(0.3,128,128), ironMat);
 scene.add(ironMesh);
 
-// === オーラ的リング（鉄球の周囲） ===
+// === オーラリング（鉄球を囲むグロー） ===
 function createAuraRing(radius, thickness){
-  const geo = new THREE.RingGeometry(radius, radius+thickness, 128);
+  const geo = new THREE.RingGeometry(radius, radius+thickness, 256);
   const colors = [];
   const pos = geo.attributes.position;
   for (let i=0; i<pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i);
     const angle = (Math.atan2(y,x) + Math.PI)/(2*Math.PI);
     const c = new THREE.Color();
-    c.setHSL(angle,1.0,0.5);
+    c.setHSL(angle,1.0,0.5); // 虹色
     colors.push(c.r,c.g,c.b);
   }
   geo.setAttribute("color", new THREE.Float32BufferAttribute(colors,3));
@@ -95,16 +95,16 @@ function createAuraRing(radius, thickness){
     vertexColors:true,
     side:THREE.DoubleSide,
     transparent:true,
-    opacity:0.7,
+    opacity:0.9, // 強調
     blending:THREE.AdditiveBlending
   });
-  const ring = new THREE.Mesh(geo, mat);
-  return ring;
+  return new THREE.Mesh(geo, mat);
 }
 
+// 鉄球の周囲に配置（鉄球0.3, ガラス球1.0 → 中間 0.6〜0.8）
 const auraGroup = new THREE.Group();
-const aura1 = createAuraRing(0.45,0.08);
-const aura2 = createAuraRing(0.6,0.08);
+const aura1 = createAuraRing(0.55,0.1);
+const aura2 = createAuraRing(0.7,0.1);
 aura1.rotation.x = Math.PI/2;
 aura2.rotation.y = Math.PI/2;
 auraGroup.add(aura1,aura2);
@@ -113,7 +113,7 @@ scene.add(auraGroup);
 // === Bloomエフェクト ===
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene,camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 1.5, 0.6, 0.85);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 2.0, 0.8, 0.85);
 composer.addPass(bloomPass);
 
 // === 時間管理 ===
@@ -133,9 +133,9 @@ function animate(){
   glassMat.roughness = 0.5*(1-p);
   glassMat.transmission = 0.5+0.5*p;
   glassMat.clearcoatRoughness = 0.3*(1-p);
-  glassMat.opacity = 1.0-p; // 最後は完全に消える
+  glassMat.opacity = 1.0-p;
 
-  // オーラ回転
+  // オーラ回転（交互方向）
   aura1.rotation.z += 0.002;
   aura2.rotation.z -= 0.0015;
 
