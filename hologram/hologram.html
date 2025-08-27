@@ -107,13 +107,15 @@ function createFlareRing(inner, outer) {
   const mat = new THREE.MeshBasicMaterial({
     map: createRainbowFlareTexture(),
     transparent: true,
-    opacity: 0.8,
+    opacity: 1.0, // 強めに
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.rotation.x = Math.PI / 2;
+  // Z方向（カメラ正面）に配置
+  mesh.rotation.x = 0;
+  mesh.rotation.y = 0;
   return mesh;
 }
 
@@ -121,9 +123,10 @@ function createFlareRing(inner, outer) {
 const bgGroup = new THREE.Group();
 scene.add(bgGroup);
 
-// ガラス球の外側に配置
+// 球体の外側にはっきり見えるサイズに
 for (let i = 0; i < 4; i++) {
-  const ring = createFlareRing(1.4 + i * 0.2, 1.55 + i * 0.2);
+  const ring = createFlareRing(2.0 + i * 0.4, 2.3 + i * 0.4);
+  ring.position.z = -0.5; // 球体の後ろに配置
   bgGroup.add(ring);
 }
 
