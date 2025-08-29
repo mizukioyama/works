@@ -78,13 +78,13 @@ function makeIron() {
   const geo = new THREE.SphereGeometry(radius, 128, 128);
 
   const mat = new THREE.MeshPhysicalMaterial({
-    color: 0xaaaaaa,         // 鉄っぽい銀灰色
+    color: 0x888888,         // 鉄のベース色
     metalness: 1.0,          // 完全金属
-    roughness: 0.2,          // 少しザラつき
-    envMap: cubeRT.texture,  // 環境反射
-    envMapIntensity: 1.5,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.05
+    roughness: 0.25,         // 少しザラつき
+    envMap: cubeRT.texture,  // ★ CubeCameraで反射キャプチャ
+    envMapIntensity: 2.0,    // 反射強調
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.1
   });
 
   ironMesh = new THREE.Mesh(geo, mat);
@@ -163,12 +163,15 @@ const auraMesh = new THREE.Mesh(auraGeo, auraMat);
 scene.add(auraMesh);
 
 // --- HDRI ---
+// HDRIを環境マップ + 背景両方に設定
 new RGBELoader()
   .setPath('https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/')
   .load('royal_esplanade_1k.hdr', (tex) => {
     tex.mapping = THREE.EquirectangularReflectionMapping;
     scene.environment = tex;
+    scene.background = tex;   // ★ 背景にもHDRIを適用
   });
+
 
 // --- 更新処理 ---
 function updateGlass(){
