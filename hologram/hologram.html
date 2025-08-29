@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>テスト - シルバー鉄球＋ホログラムリング＋ガラス球</title>
+<title>テスト - シルバー鉄球＋ガラス＋ホログラムリング</title>
 <script type="importmap">
 {
   "imports": {
@@ -20,6 +20,7 @@
 <body>
 <script type="module">
 import * as THREE from "three";
+import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 
 // --- 基本 ---
 const scene = new THREE.Scene();
@@ -34,8 +35,8 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 // --- 背景を幻想的な灰色 ---
-renderer.setClearColor(new THREE.Color(0xd9d9d9));
-scene.background = new THREE.Color(0xd9d9d9);
+renderer.setClearColor(new THREE.Color(0x2a2a2d));
+scene.background = new THREE.Color(0x2a2a2d);
 
 // ライト
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -43,40 +44,64 @@ const dir = new THREE.DirectionalLight(0xffffff, 1.2);
 dir.position.set(3,4,5);
 scene.add(dir);
 
-// --- 鉄球（シルバー） ---
-const ironGeo = new THREE.SphereGeometry(0.6, 128, 128);
-const ironMat = new THREE.MeshStandardMaterial({
-  color: 0xaaaaaa,
-  metalness: 1.0,
-  roughness: 0.2
+// --- 反射キャプチャ用 CubeCamera ---
+const cubeRT = new THREE.WebGLCubeRenderTarget(256, {
+  format: THREE.RGBAFormat,
+  generateMipmaps: true,
+  minFilter: THREE.LinearMipmapLinearFilter
 });
-const ironMesh = new THREE.Mesh(ironGeo, ironMat);
-scene.add(ironMesh);
+const cubeCamera = new THREE.CubeCamera(0.1, 100, cubeRT);
+scene.add(cubeCamera);
 
-// --- ガラス球（鉄球を包むように少し大きめ） ---
-const glassGeo = new THREE.SphereGeometry(0.65, 128, 128);
-const glassMat = new THREE.MeshPhysicalMaterial({
-  color: 0xffffff,
-  metalness: 0,
-  roughness: 0,
-  transmission: 1.0,   // 完全透明
-  thickness: 0.2,
-  clearcoat: 1.0,
-  clearcoatRoughness: 0.1
-});
-const glassMesh = new THREE.Mesh(glassGeo, glassMat);
-scene.add(glassMesh);
+// --- ガラス球 ---
+let glassMesh;
+{
+  const geo = new THREE.SphereGeometry(0.45, 64, 64);
+  const mat = new THREE.MeshPhysicalMaterial({
+    transmission: 0.9,
+    thickness: 0.6,
+    roughness: 0.1,
+    metalness: 0.0,
+    ior: 1.5,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.1,
+    transparent: true,
+    opacity: 1.0,
+    depthWrite: false
+  });
+  glassMesh = new THREE.Mesh(geo, mat);
+  glassMesh.renderOrder = 2;
+  scene.add(glassMesh);
+}
 
-// --- ホログラムリング（永続的、時計の役割） ---
+// --- 鉄球（メタリックシルバー） ---
+let ironMesh;
+{
+  const geo = new THREE.SphereGeometry(0.3, 128, 128);
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: 0xcccccc,
+    metalness: 1.0,
+    roughness: 0.2,
+    envMap: cubeRT.texture,
+    envMapIntensity: 2.0,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.05
+  });
+  ironMesh = new THREE.Mesh(geo, mat);
+  ironMesh.renderOrder = 1;
+  scene.add(ironMesh);
+}
+
+// --- ホログラムリング（永続的に拡大 = 時計の役割） ---
 const holoGroup = new THREE.Group();
 scene.add(holoGroup);
 
 function makeHoloRing(radius, thickness, color){
-  const geo = new THREE.RingGeometry(radius, radius+thickness, 128);
+  const geo = new THREE.RingGeometry(radius, radius+thickness, 256);
   const mat = new THREE.MeshBasicMaterial({
     color: color,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.4,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
@@ -86,36 +111,43 @@ function makeHoloRing(radius, thickness, color){
   return mesh;
 }
 
-const rings = [];
-for (let i=0; i<12; i++){ // 時計っぽく12本
-  const ring = makeHoloRing(1.5 + i*0.15, 0.05, new THREE.Color(`hsl(${i*30},100%,60%)`));
-  ring.userData = { index: i };
+// 複数リング（時計の目盛り的）
+for (let i=0; i<12; i++){
+  const ring = makeHoloRing(1.5+i*0.3, 0.05, new THREE.Color(`hsl(${i*30},100%,50%)`));
   holoGroup.add(ring);
-  rings.push(ring);
 }
 
-// --- アニメーション ---
+// --- 更新処理 ---
 const startTime = Date.now();
 
-function animate(){
-  requestAnimationFrame(animate);
+function updateScene(){
   const t = (Date.now() - startTime) / 1000;
 
-  // 鉄球回転
+  // 鉄球を回転
   ironMesh.rotation.y += 0.01;
   ironMesh.rotation.x += 0.005;
 
-  // ガラス球は鉄球と同調
-  glassMesh.rotation.copy(ironMesh.rotation);
+  // ガラスは鉄球を包むように追従
+  glassMesh.position.copy(ironMesh.position);
 
-  // リング拡大（時間経過でスケールアップ）
-  rings.forEach((ring,i)=>{
-    const scale = 1 + t * 0.02 + i*0.05; // 時計っぽくゆっくり広がる
+  // リングを時間に応じて大きくする
+  holoGroup.children.forEach((ring,i)=>{
+    const scale = 1.0 + t*0.02 + i*0.05; // 時間とともに拡大
     ring.scale.setScalar(scale);
-    // 色もゆっくり変化
-    const hue = (t*10 + i*30) % 360 / 360;
-    ring.material.color.setHSL(hue, 1.0, 0.6);
+    ring.material.opacity = 0.3 + 0.2*Math.sin(t+i);
   });
+}
+
+// --- animate ---
+function animate(){
+  requestAnimationFrame(animate);
+
+  // 鉄球の環境マップ更新
+  ironMesh.visible = false;
+  cubeCamera.update(renderer, scene);
+  ironMesh.visible = true;
+
+  updateScene();
 
   renderer.render(scene, camera);
 }
