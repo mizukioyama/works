@@ -24,7 +24,7 @@ import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 
 // --- 基本 ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x202124); // ★ 少し青みがかったグレー
+scene.background = new THREE.Color(0x202124); // ★ 幻想的な灰色
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
 camera.position.set(0, 0, 4);
 
@@ -41,6 +41,10 @@ const dir = new THREE.DirectionalLight(0xffffff, 1.2);
 dir.position.set(3,4,5);
 scene.add(dir);
 
+// --- グローバル変数 ---
+let glassMesh = null;
+let ironMesh = null;
+
 // --- 反射キャプチャ用 CubeCamera ---
 const cubeRT = new THREE.WebGLCubeRenderTarget(256, {
   format: THREE.RGBAFormat,
@@ -52,46 +56,41 @@ scene.add(cubeCamera);
 
 // --- ガラス球 ---
 function makeGlass() {
-   const geo = new THREE.SphereGeometry(1.0, 64, 64);
-   const mat = new THREE.MeshPhysicalMaterial({
-     transmission: 0.5,
-     thickness: 0.6,
-     roughness: 0.4,
-     metalness: 0.0,
-     ior: 1.5,
-     clearcoat: 1.0,
-     clearcoatRoughness: 0.3,
-     transparent: true,
-     opacity: 1.0,
-    depthWrite: false   // ★ これを追加（中の鉄球を隠さない）
-   });
-   glassMesh = new THREE.Mesh(geo, mat);
-   glassMesh.renderOrder = 2;
-   scene.add(glassMesh);
+  const geo = new THREE.SphereGeometry(1.0, 64, 64);
+  const mat = new THREE.MeshPhysicalMaterial({
+    transmission: 0.5,
+    thickness: 0.6,
+    roughness: 0.4,
+    metalness: 0.0,
+    ior: 1.5,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.3,
+    transparent: true,
+    opacity: 1.0,
+    depthWrite: false // 中の鉄球を隠さない
+  });
+  glassMesh = new THREE.Mesh(geo, mat);
+  glassMesh.renderOrder = 2;
+  scene.add(glassMesh);
 }
-
 
 // --- 鉄球 ---
 function makeIron() {
-  const radius = 0.8;   // ★ 少し大きくしてガラス球内で目立つようにする
-   const geo = new THREE.SphereGeometry(radius, 128, 128);
-
-   const mat = new THREE.MeshPhysicalMaterial({
-     color: 0x888888,
-     metalness: 1.0,
-     roughness: 0.25,
-     envMap: cubeRT.texture,
-     envMapIntensity: 2.0,
-     clearcoat: 0.8,
-     clearcoatRoughness: 0.1
-   });
-
-   ironMesh = new THREE.Mesh(geo, mat);
-   ironMesh.renderOrder = 1;
-   scene.add(ironMesh);
+  const radius = 0.8;
+  const geo = new THREE.SphereGeometry(radius, 128, 128);
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: 0x888888,
+    metalness: 1.0,
+    roughness: 0.25,
+    envMap: cubeRT.texture,
+    envMapIntensity: 2.0,
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.1
+  });
+  ironMesh = new THREE.Mesh(geo, mat);
+  ironMesh.renderOrder = 1;
+  scene.add(ironMesh);
 }
-
-
 
 // --- 虹色リング ---
 function createRainbowRing(inner, outer, seg=256) {
@@ -208,14 +207,16 @@ function updateGlass(){
 function updateBackground(){
   const t = (Date.now() - startTime) / 1000;
 
-  // 虹リングアニメ
+  // 虹リング
   ringGroup.children.forEach((r,i) => {
     r.rotation.z += 0.0018 * (i % 2 ? -1 : 1);
     r.material.opacity = 0.6 + 0.25 * Math.sin(t*2 + i);
   });
 
   // オーラ
-  auraMesh.position.copy(ironMesh.position);
+  if (ironMesh){
+    auraMesh.position.copy(ironMesh.position);
+  }
   auraMesh.material.uniforms.intensity.value = 1.0 + 0.6 * Math.sin(t*2.5);
   auraMesh.scale.setScalar(1.0 + 0.02*Math.sin(t*1.7));
 
@@ -230,6 +231,10 @@ function updateBackground(){
 
 // --- 時間管理 ---
 const startTime = Date.now();
+
+// --- 初期化 ---
+makeIron();
+makeGlass();
 
 // --- animate ---
 function animate(){
