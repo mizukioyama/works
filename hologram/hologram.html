@@ -24,7 +24,6 @@ import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 
 // --- 基本 ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x202124); // ★ 幻想的な灰色
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
 camera.position.set(0, 0, 4);
 
@@ -41,10 +40,6 @@ const dir = new THREE.DirectionalLight(0xffffff, 1.2);
 dir.position.set(3,4,5);
 scene.add(dir);
 
-// --- グローバル変数 ---
-let glassMesh = null;
-let ironMesh = null;
-
 // --- 反射キャプチャ用 CubeCamera ---
 const cubeRT = new THREE.WebGLCubeRenderTarget(256, {
   format: THREE.RGBAFormat,
@@ -55,26 +50,29 @@ const cubeCamera = new THREE.CubeCamera(0.1, 100, cubeRT);
 scene.add(cubeCamera);
 
 // --- ガラス球 ---
+let glassMesh;
 function makeGlass() {
-  const geo = new THREE.SphereGeometry(1.0, 64, 64);
-  const mat = new THREE.MeshPhysicalMaterial({
-    transmission: 0.5,
-    thickness: 0.6,
-    roughness: 0.4,
-    metalness: 0.0,
-    ior: 1.5,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.3,
-    transparent: true,
-    opacity: 1.0,
-    depthWrite: false // 中の鉄球を隠さない
-  });
-  glassMesh = new THREE.Mesh(geo, mat);
-  glassMesh.renderOrder = 2;
-  scene.add(glassMesh);
+   const geo = new THREE.SphereGeometry(1.0, 64, 64);
+   const mat = new THREE.MeshPhysicalMaterial({
+     transmission: 0.5,
+     thickness: 0.6,
+     roughness: 0.4,
+     metalness: 0.0,
+     ior: 1.5,
+     clearcoat: 1.0,
+     clearcoatRoughness: 0.3,
+     transparent: true,
+     opacity: 1.0,
+     depthWrite: false
+   });
+   glassMesh = new THREE.Mesh(geo, mat);
+   glassMesh.renderOrder = 2;
+   scene.add(glassMesh);
 }
+makeGlass();
 
 // --- 鉄球 ---
+let ironMesh;
 function makeIron() {
   const radius = 0.8;
   const geo = new THREE.SphereGeometry(radius, 128, 128);
@@ -91,6 +89,7 @@ function makeIron() {
   ironMesh.renderOrder = 1;
   scene.add(ironMesh);
 }
+makeIron();
 
 // --- 虹色リング ---
 function createRainbowRing(inner, outer, seg=256) {
@@ -191,11 +190,43 @@ new RGBELoader()
     scene.environment = tex;
   });
 
+// --- 背景シェーダー ---
+const bgGeo = new THREE.PlaneGeometry(2, 2);
+const bgMat = new THREE.ShaderMaterial({
+  side: THREE.DoubleSide,
+  depthWrite: false,
+  depthTest: false,
+  uniforms: { uTime: { value: 0.0 } },
+  vertexShader: `
+    varying vec2 vUv;
+    void main(){
+      vUv = uv;
+      gl_Position = vec4(position,1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec2 vUv;
+    uniform float uTime;
+    void main(){
+      float r = length(vUv - 0.5);
+      float angle = atan(vUv.y-0.5, vUv.x-0.5);
+      float glow = 0.4 + 0.3*sin(uTime*0.5 + angle*3.0);
+      vec3 col = mix(vec3(0.05,0.05,0.1), vec3(0.2,0.5,0.8), smoothstep(0.2, 0.6, r));
+      col += vec3(0.5,0.2,0.8) * glow * (1.0-r);
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `
+});
+const bgMesh = new THREE.Mesh(bgGeo, bgMat);
+const bgScene = new THREE.Scene();
+const bgCam = new THREE.Camera();
+bgScene.add(bgMesh);
+
 // --- 更新処理 ---
 function updateGlass(){
   if (!glassMesh) return;
   const elapsed = (Date.now() - startTime) / 1000;
-  const p = Math.min(elapsed / 60, 1.0);
+  const p = Math.min(elapsed / 30, 1.0); // ★ 30秒で透明化
   const m = glassMesh.material;
   m.roughness = 0.4 * (1-p);
   m.transmission = 0.5 + 0.5 * p;
@@ -207,6 +238,9 @@ function updateGlass(){
 function updateBackground(){
   const t = (Date.now() - startTime) / 1000;
 
+  // 背景
+  bgMesh.material.uniforms.uTime.value = t;
+
   // 虹リング
   ringGroup.children.forEach((r,i) => {
     r.rotation.z += 0.0018 * (i % 2 ? -1 : 1);
@@ -214,27 +248,21 @@ function updateBackground(){
   });
 
   // オーラ
-  if (ironMesh){
-    auraMesh.position.copy(ironMesh.position);
-  }
+  auraMesh.position.copy(ironMesh.position);
   auraMesh.material.uniforms.intensity.value = 1.0 + 0.6 * Math.sin(t*2.5);
   auraMesh.scale.setScalar(1.0 + 0.02*Math.sin(t*1.7));
 
-  // ホログラムリング拡大
+  // ホログラムリング
   holoGroup.children.forEach((ring,i)=>{
-    const s = 1.0 + t*0.05 + 0.1*Math.sin(t*1.5+i);
+    const s = 1.0 + 0.3*Math.sin(t*1.5+i);
     ring.scale.setScalar(s);
-    ring.material.opacity = 0.2 + 0.2 * Math.sin(t*2 + i);
-    ring.material.color.setHSL((t*20+i*60)%360/360, 1.0, 0.5);
+    ring.material.opacity = 0.3 + 0.3 * Math.sin(t*2 + i);
+    ring.material.color.setHSL((t*40+i*60)%360/360, 1.0, 0.6);
   });
 }
 
 // --- 時間管理 ---
 const startTime = Date.now();
-
-// --- 初期化 ---
-makeIron();
-makeGlass();
 
 // --- animate ---
 function animate(){
@@ -251,6 +279,12 @@ function animate(){
 
   updateGlass();
   updateBackground();
+
+  // ①背景
+  renderer.autoClear = false;
+  renderer.clear();
+  renderer.render(bgScene, bgCam);
+  // ②メイン
   renderer.render(scene, camera);
 }
 animate();
