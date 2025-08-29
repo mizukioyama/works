@@ -20,7 +20,6 @@
 <body>
 <script type="module">
 import * as THREE from "three";
-import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 
 // --- 基本 ---
 const scene = new THREE.Scene();
@@ -53,26 +52,81 @@ const cubeRT = new THREE.WebGLCubeRenderTarget(256, {
 const cubeCamera = new THREE.CubeCamera(0.1, 100, cubeRT);
 scene.add(cubeCamera);
 
-// --- 鉄球（シルバー） ---
-let ironMesh;
-function makeIron() {
-  const radius = 1.0;
-  const geo = new THREE.SphereGeometry(radius, 128, 128);
-  const mat = new THREE.MeshPhysicalMaterial({
-    color: 0xcccccc,           // シルバー系
-    metalness: 1.0,
-    roughness: 0.2,
-    envMap: cubeRT.texture,
-    envMapIntensity: 2.5,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.1
+// --- 鉄球（シルバー＋グラデーションShader） ---
+let ironMesh, ironMaterial;
+const startTime = Date.now();
+
+function createIronSphere() {
+  const geo = new THREE.SphereGeometry(0.6, 128, 128);
+
+  const uniforms = {
+    color1: { value: new THREE.Color(1, 0, 0) }, // 初期 赤
+    color2: { value: new THREE.Color(1, 1, 1) }  // 初期 白
+  };
+
+  ironMaterial = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: `
+      varying vec3 vNormal;
+      varying vec3 vPos;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vPos = (modelViewMatrix * vec4(position,1.0)).xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color1;
+      uniform vec3 color2;
+      varying vec3 vNormal;
+      varying vec3 vPos;
+
+      void main() {
+        float mixFactor = (vNormal.y + 1.0) * 0.5;
+        vec3 baseColor = mix(color1, color2, mixFactor);
+
+        vec3 viewDir = normalize(-vPos);
+        float spec = pow(max(dot(normalize(vNormal), viewDir), 0.0), 64.0);
+
+        gl_FragColor = vec4(baseColor + spec * 0.8, 1.0);
+      }
+    `
   });
-  ironMesh = new THREE.Mesh(geo, mat);
+
+  ironMesh = new THREE.Mesh(geo, ironMaterial);
   scene.add(ironMesh);
 }
-makeIron();
+createIronSphere();
 
-// --- ホログラムリング（鉄球より大きめ） ---
+// グラデーションカラーセット
+const gradientSets = [
+  [new THREE.Color(1, 0, 0), new THREE.Color(1, 1, 1)], // 赤×白
+  [new THREE.Color(0, 0, 1), new THREE.Color(1, 1, 1)], // 青×白
+  [new THREE.Color(1, 1, 1), new THREE.Color(0, 0, 0)]  // 白×黒
+];
+
+function updateIronSphere() {
+  if (!ironMesh || !ironMaterial) return;
+
+  const elapsed = (Date.now() - startTime) / 1000; 
+  const cycleTime = 10.0; 
+  const t = (elapsed / cycleTime) % gradientSets.length;
+
+  const i1 = Math.floor(t);
+  const i2 = (i1 + 1) % gradientSets.length;
+  const blend = t - i1;
+
+  const col1 = new THREE.Color().lerpColors(gradientSets[i1][0], gradientSets[i2][0], blend);
+  const col2 = new THREE.Color().lerpColors(gradientSets[i1][1], gradientSets[i2][1], blend);
+
+  ironMaterial.uniforms.color1.value.copy(col1);
+  ironMaterial.uniforms.color2.value.copy(col2);
+
+  ironMesh.rotation.y += 0.002;
+  ironMesh.rotation.x += 0.001;
+}
+
+// --- ホログラムリング ---
 const holoGroup = new THREE.Group();
 scene.add(holoGroup);
 
@@ -91,7 +145,6 @@ function makeHoloRing(radius, thickness, color){
   return mesh;
 }
 
-// 大きめリングを複数追加
 for (let i=0; i<8; i++){
   const ring = makeHoloRing(2+i*0.5, 0.08, new THREE.Color(`hsl(${i*45},100%,60%)`));
   ring.userData = {
@@ -102,8 +155,6 @@ for (let i=0; i<8; i++){
 }
 
 // --- 更新処理 ---
-const startTime = Date.now();
-
 function updateBackground(){
   const t = (Date.now() - startTime) / 1000;
 
@@ -111,19 +162,15 @@ function updateBackground(){
     const elapsed = t - ring.userData.startTime;
     if (elapsed < 0) return;
 
-    // 拡大
     const scale = 1.0 + elapsed * ring.userData.speed * 10.0;
     ring.scale.setScalar(scale);
 
-    // フェードアウト
     const fade = Math.max(1.0 - elapsed*0.3, 0.0);
     ring.material.opacity = fade * 0.5;
 
-    // 色変化
     const hue = (t*20 + i*40) % 360 / 360;
     ring.material.color.setHSL(hue, 1.0, 0.6);
 
-    // リセット
     if (fade <= 0.0){
       ring.userData.startTime = t + Math.random()*2.0;
       ring.scale.setScalar(1.0);
@@ -139,11 +186,9 @@ function animate(){
     ironMesh.visible = false;
     cubeCamera.update(renderer, scene);
     ironMesh.visible = true;
-
-    ironMesh.rotation.y += 0.01;
-    ironMesh.rotation.x += 0.005;
   }
 
+  updateIronSphere();
   updateBackground();
 
   renderer.render(scene, camera);
