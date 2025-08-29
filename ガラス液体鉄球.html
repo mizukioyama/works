@@ -252,51 +252,43 @@ window.addEventListener("resize", () => {
 </html>
 
 
-// --- 中心の発光球 ---
-const coreGeo = new THREE.SphereGeometry(0.2, 32, 32);
-const coreMat = new THREE.MeshBasicMaterial({
-  color: 0xffffff,
-  transparent: true,
-  opacity: 1.0,
-  blending: THREE.AdditiveBlending
-});
-const coreMesh = new THREE.Mesh(coreGeo, coreMat);
-scene.add(coreMesh);
-
-// --- ホログラムリング ---
-function makeHoloRing(radius, thickness, color){
-  const geo = new THREE.RingGeometry(radius, radius+thickness, 128);
-  const mat = new THREE.MeshBasicMaterial({
-    color: color,
+// --- ガラス球 ---
+let glassMesh;
+function makeGlass() {
+  const geo = new THREE.SphereGeometry(0.55, 64, 64); // 鉄球(0.5)より少し大きい
+  const mat = new THREE.MeshPhysicalMaterial({
+    transmission: 1.0,      // 完全透過
+    thickness: 0.2,         // 薄めのガラス層
+    roughness: 0.05,        // 滑らか
+    metalness: 0.0,
+    ior: 1.5,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.05,
     transparent: true,
-    opacity: 0.5,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: false
+    opacity: 0.35           // 半透明にする
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.rotation.x = Math.PI/2;
-  return mesh;
+  glassMesh = new THREE.Mesh(geo, mat);
+  glassMesh.renderOrder = 2; // 鉄球より後に描画
+  scene.add(glassMesh);
 }
+makeGlass();
 
-const holoGroup = new THREE.Group();
-for (let i=0; i<5; i++){
-  const ring = makeHoloRing(1+i*0.3, 0.08, new THREE.Color(`hsl(${i*60},100%,50%)`));
-  holoGroup.add(ring);
-}
-scene.add(holoGroup);
-
-// --- 更新処理でリングを拡大 ---
-function updateHolo(){
-  const t = (Date.now()-startTime)/1000;
-
-  holoGroup.children.forEach((ring,i)=>{
-    const s = 1.0 + 0.2 * Math.sin(t*0.5 + i);
-    ring.scale.setScalar(s + t*0.05); // 時間とともに拡大
-    ring.material.opacity = 0.3 + 0.2 * Math.sin(t*2 + i);
-    ring.material.color.setHSL((t*20+i*60)%360/360, 1.0, 0.5);
+// --- 鉄球（リアルメタル質感） ---
+let ironMesh;
+function makeIron() {
+  const radius = 0.5; // 中心の鉄球
+  const geo = new THREE.SphereGeometry(radius, 128, 128);
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: 0x888888,
+    metalness: 1.0,
+    roughness: 0.25,
+    envMap: cubeRT.texture,
+    envMapIntensity: 2.0,
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.1
   });
-
-  // 中心コアも明滅
-  coreMesh.scale.setScalar(1.0 + 0.1*Math.sin(t*5));
+  ironMesh = new THREE.Mesh(geo, mat);
+  ironMesh.renderOrder = 1; // 先に描画
+  scene.add(ironMesh);
 }
+makeIron();
