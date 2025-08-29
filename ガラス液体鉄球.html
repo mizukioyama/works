@@ -252,34 +252,51 @@ window.addEventListener("resize", () => {
 </html>
 
 
-// --- HDRI ---
-// HDRIを環境マップ + 背景両方に設定
-new RGBELoader()
-  .setPath('https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/')
-  .load('royal_esplanade_1k.hdr', (tex) => {
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    scene.environment = tex;
-    scene.background = tex;   // ★ 背景にもHDRIを適用
+// --- 中心の発光球 ---
+const coreGeo = new THREE.SphereGeometry(0.2, 32, 32);
+const coreMat = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  transparent: true,
+  opacity: 1.0,
+  blending: THREE.AdditiveBlending
+});
+const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+scene.add(coreMesh);
+
+// --- ホログラムリング ---
+function makeHoloRing(radius, thickness, color){
+  const geo = new THREE.RingGeometry(radius, radius+thickness, 128);
+  const mat = new THREE.MeshBasicMaterial({
+    color: color,
+    transparent: true,
+    opacity: 0.5,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    depthWrite: false
   });
-
-  // --- 鉄球（リアルメタル質感） ---
-let ironMesh;
-function makeIron() {
-  const radius = 0.5;
-  const geo = new THREE.SphereGeometry(radius, 128, 128);
-
-  const mat = new THREE.MeshPhysicalMaterial({
-    color: 0x888888,         // 鉄のベース色
-    metalness: 1.0,          // 完全金属
-    roughness: 0.25,         // 少しザラつき
-    envMap: cubeRT.texture,  // ★ CubeCameraで反射キャプチャ
-    envMapIntensity: 2.0,    // 反射強調
-    clearcoat: 0.8,
-    clearcoatRoughness: 0.1
-  });
-
-  ironMesh = new THREE.Mesh(geo, mat);
-  ironMesh.renderOrder = 1;
-  scene.add(ironMesh);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = Math.PI/2;
+  return mesh;
 }
-makeIron();
+
+const holoGroup = new THREE.Group();
+for (let i=0; i<5; i++){
+  const ring = makeHoloRing(1+i*0.3, 0.08, new THREE.Color(`hsl(${i*60},100%,50%)`));
+  holoGroup.add(ring);
+}
+scene.add(holoGroup);
+
+// --- 更新処理でリングを拡大 ---
+function updateHolo(){
+  const t = (Date.now()-startTime)/1000;
+
+  holoGroup.children.forEach((ring,i)=>{
+    const s = 1.0 + 0.2 * Math.sin(t*0.5 + i);
+    ring.scale.setScalar(s + t*0.05); // 時間とともに拡大
+    ring.material.opacity = 0.3 + 0.2 * Math.sin(t*2 + i);
+    ring.material.color.setHSL((t*20+i*60)%360/360, 1.0, 0.5);
+  });
+
+  // 中心コアも明滅
+  coreMesh.scale.setScalar(1.0 + 0.1*Math.sin(t*5));
+}

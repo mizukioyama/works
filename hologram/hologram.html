@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>メタリック鉄球＋ガラス球＋虹色オーラ</title>
+<title>メタリック鉄球＋ガラス球＋虹色オーラ＋ホログラムリング</title>
 <script type="importmap">
 {
   "imports": {
@@ -13,7 +13,7 @@
 }
 </script>
 <style>
-  html,body { height:100%; margin:0; background:#f0f0f0; }
+  html,body { height:100%; margin:0; background:#000; }
   canvas { display:block; width:100%; height:100%; }
 </style>
 </head>
@@ -24,7 +24,7 @@ import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 
 // --- 基本 ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xf0f0f0);
+scene.background = new THREE.Color(0x000000);
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
 camera.position.set(0, 0, 4);
 
@@ -78,11 +78,11 @@ function makeIron() {
   const geo = new THREE.SphereGeometry(radius, 128, 128);
 
   const mat = new THREE.MeshPhysicalMaterial({
-    color: 0x888888,         // 鉄のベース色
-    metalness: 1.0,          // 完全金属
-    roughness: 0.25,         // 少しザラつき
-    envMap: cubeRT.texture,  // ★ CubeCameraで反射キャプチャ
-    envMapIntensity: 2.0,    // 反射強調
+    color: 0x888888,
+    metalness: 1.0,
+    roughness: 0.25,
+    envMap: cubeRT.texture,
+    envMapIntensity: 2.0,
     clearcoat: 0.8,
     clearcoatRoughness: 0.1
   });
@@ -162,16 +162,35 @@ const auraMat = new THREE.ShaderMaterial({
 const auraMesh = new THREE.Mesh(auraGeo, auraMat);
 scene.add(auraMesh);
 
+// --- 背景ホログラムリング ---
+const holoGroup = new THREE.Group();
+function makeHoloRing(radius, thickness, color){
+  const geo = new THREE.RingGeometry(radius, radius+thickness, 128);
+  const mat = new THREE.MeshBasicMaterial({
+    color: color,
+    transparent: true,
+    opacity: 0.4,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = Math.PI/2;
+  return mesh;
+}
+for (let i=0; i<5; i++){
+  const ring = makeHoloRing(1+i*0.4, 0.1, new THREE.Color(`hsl(${i*60},100%,50%)`));
+  holoGroup.add(ring);
+}
+scene.add(holoGroup);
+
 // --- HDRI ---
-// HDRIを環境マップ + 背景両方に設定
 new RGBELoader()
   .setPath('https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/')
   .load('royal_esplanade_1k.hdr', (tex) => {
     tex.mapping = THREE.EquirectangularReflectionMapping;
     scene.environment = tex;
-    scene.background = tex;   // ★ 背景にもHDRIを適用
   });
-
 
 // --- 更新処理 ---
 function updateGlass(){
@@ -188,13 +207,25 @@ function updateGlass(){
 
 function updateBackground(){
   const t = (Date.now() - startTime) / 1000;
+
+  // 虹リングアニメ
   ringGroup.children.forEach((r,i) => {
     r.rotation.z += 0.0018 * (i % 2 ? -1 : 1);
     r.material.opacity = 0.6 + 0.25 * Math.sin(t*2 + i);
   });
+
+  // オーラ
   auraMesh.position.copy(ironMesh.position);
   auraMesh.material.uniforms.intensity.value = 1.0 + 0.6 * Math.sin(t*2.5);
   auraMesh.scale.setScalar(1.0 + 0.02*Math.sin(t*1.7));
+
+  // ホログラムリング拡大
+  holoGroup.children.forEach((ring,i)=>{
+    const s = 1.0 + t*0.05 + 0.1*Math.sin(t*1.5+i);
+    ring.scale.setScalar(s);
+    ring.material.opacity = 0.2 + 0.2 * Math.sin(t*2 + i);
+    ring.material.color.setHSL((t*20+i*60)%360/360, 1.0, 0.5);
+  });
 }
 
 // --- 時間管理 ---
@@ -205,12 +236,10 @@ function animate(){
   requestAnimationFrame(animate);
 
   if (ironMesh){
-    // ★ 反射用の環境マップ更新
     ironMesh.visible = false;
     cubeCamera.update(renderer, scene);
     ironMesh.visible = true;
 
-    // ★ ゆっくり回転
     ironMesh.rotation.y += 0.01;
     ironMesh.rotation.x += 0.005;
   }
