@@ -253,42 +253,44 @@ window.addEventListener("resize", () => {
 
 
 // --- ガラス球 ---
-let glassMesh;
 function makeGlass() {
-  const geo = new THREE.SphereGeometry(0.55, 64, 64); // 鉄球(0.5)より少し大きい
-  const mat = new THREE.MeshPhysicalMaterial({
-    transmission: 1.0,      // 完全透過
-    thickness: 0.2,         // 薄めのガラス層
-    roughness: 0.05,        // 滑らか
-    metalness: 0.0,
-    ior: 1.5,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.05,
-    transparent: true,
-    opacity: 0.35           // 半透明にする
-  });
-  glassMesh = new THREE.Mesh(geo, mat);
-  glassMesh.renderOrder = 2; // 鉄球より後に描画
-  scene.add(glassMesh);
+   const geo = new THREE.SphereGeometry(1.0, 64, 64);
+   const mat = new THREE.MeshPhysicalMaterial({
+     transmission: 0.5,
+     thickness: 0.6,
+     roughness: 0.4,
+     metalness: 0.0,
+     ior: 1.5,
+     clearcoat: 1.0,
+     clearcoatRoughness: 0.3,
+     transparent: true,
+     opacity: 1.0,
++    depthWrite: false   // ★ これを追加（中の鉄球を隠さない）
+   });
+   glassMesh = new THREE.Mesh(geo, mat);
+   glassMesh.renderOrder = 2;
+   scene.add(glassMesh);
 }
-makeGlass();
 
-// --- 鉄球（リアルメタル質感） ---
-let ironMesh;
+
+// --- 鉄球 ---
 function makeIron() {
-  const radius = 0.5; // 中心の鉄球
-  const geo = new THREE.SphereGeometry(radius, 128, 128);
-  const mat = new THREE.MeshPhysicalMaterial({
-    color: 0x888888,
-    metalness: 1.0,
-    roughness: 0.25,
-    envMap: cubeRT.texture,
-    envMapIntensity: 2.0,
-    clearcoat: 0.8,
-    clearcoatRoughness: 0.1
-  });
-  ironMesh = new THREE.Mesh(geo, mat);
-  ironMesh.renderOrder = 1; // 先に描画
-  scene.add(ironMesh);
+-  const radius = 0.5;
++  const radius = 0.8;   // ★ 少し大きくしてガラス球内で目立つようにする
+   const geo = new THREE.SphereGeometry(radius, 128, 128);
+
+   const mat = new THREE.MeshPhysicalMaterial({
+     color: 0x888888,
+     metalness: 1.0,
+     roughness: 0.25,
+     envMap: cubeRT.texture,
+     envMapIntensity: 2.0,
+     clearcoat: 0.8,
+     clearcoatRoughness: 0.1
+   });
+
+   ironMesh = new THREE.Mesh(geo, mat);
+-  ironMesh.renderOrder = 1;
++  ironMesh.renderOrder = 1;
+   scene.add(ironMesh);
 }
-makeIron();
