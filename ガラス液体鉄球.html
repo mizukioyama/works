@@ -250,3 +250,46 @@ window.addEventListener("resize", () => {
 </script>
 </body>
 </html>
+
+
+// --- 鉄球（リアルメタル質感＋回転＋反射） ---
+let ironMesh;
+function makeIron() {
+  const radius = 0.5;
+  const geo = new THREE.SphereGeometry(radius, 128, 128);
+
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: 0xaaaaaa,         // 鉄っぽい銀灰色
+    metalness: 1.0,          // 完全金属
+    roughness: 0.2,          // 少しザラつき
+    envMap: cubeRT.texture,  // ★ CubeCameraによる環境反射
+    envMapIntensity: 1.5,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.05
+  });
+
+  ironMesh = new THREE.Mesh(geo, mat);
+  ironMesh.renderOrder = 1;
+  scene.add(ironMesh);
+}
+makeIron();
+
+
+function animate(){
+  requestAnimationFrame(animate);
+
+  if (ironMesh){
+    // ★ 反射用の環境マップ更新
+    ironMesh.visible = false;
+    cubeCamera.update(renderer, scene);
+    ironMesh.visible = true;
+
+    // ★ ゆっくり回転
+    ironMesh.rotation.y += 0.01;
+    ironMesh.rotation.x += 0.005;
+  }
+
+  updateGlass();
+  updateBackground();
+  renderer.render(scene, camera);
+}

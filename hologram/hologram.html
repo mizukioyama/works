@@ -200,12 +200,18 @@ const startTime = Date.now();
 // --- animate ---
 function animate(){
   requestAnimationFrame(animate);
+
   if (ironMesh){
+    // ★ 反射用の環境マップ更新
     ironMesh.visible = false;
     cubeCamera.update(renderer, scene);
     ironMesh.visible = true;
-    ironMesh.rotation.y += 0.002; // ゆっくり回転
+
+    // ★ ゆっくり回転
+    ironMesh.rotation.y += 0.01;
+    ironMesh.rotation.x += 0.005;
   }
+
   updateGlass();
   updateBackground();
   renderer.render(scene, camera);
