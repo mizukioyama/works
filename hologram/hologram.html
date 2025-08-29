@@ -24,6 +24,7 @@ import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 
 // --- 基本 ---
 const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x111218); // 暗めの灰色
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
 camera.position.set(0, 0, 4);
 
@@ -162,12 +163,14 @@ scene.add(auraMesh);
 
 // --- 背景ホログラムリング ---
 const holoGroup = new THREE.Group();
+scene.add(holoGroup);
+
 function makeHoloRing(radius, thickness, color){
   const geo = new THREE.RingGeometry(radius, radius+thickness, 128);
   const mat = new THREE.MeshBasicMaterial({
     color: color,
     transparent: true,
-    opacity: 0.4,
+    opacity: 0.6,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
@@ -176,11 +179,18 @@ function makeHoloRing(radius, thickness, color){
   mesh.rotation.x = Math.PI/2;
   return mesh;
 }
-for (let i=0; i<5; i++){
-  const ring = makeHoloRing(1+i*0.4, 0.1, new THREE.Color(`hsl(${i*60},100%,50%)`));
-  holoGroup.add(ring);
+
+// リングを多数生成しておく
+const MAX_RINGS = 12;
+for (let i=0; i<MAX_RINGS; i++){
+  const r = makeHoloRing(0.5, 0.08, new THREE.Color(0x44ccff));
+  r.userData = {
+    startTime: Math.random()*5,
+    speed: 0.05 + Math.random()*0.03,
+    baseColor: new THREE.Color().setHSL(Math.random(),1,0.6)
+  };
+  holoGroup.add(r);
 }
-scene.add(holoGroup);
 
 // --- HDRI ---
 new RGBELoader()
@@ -190,43 +200,11 @@ new RGBELoader()
     scene.environment = tex;
   });
 
-// --- 背景シェーダー ---
-const bgGeo = new THREE.PlaneGeometry(2, 2);
-const bgMat = new THREE.ShaderMaterial({
-  side: THREE.DoubleSide,
-  depthWrite: false,
-  depthTest: false,
-  uniforms: { uTime: { value: 0.0 } },
-  vertexShader: `
-    varying vec2 vUv;
-    void main(){
-      vUv = uv;
-      gl_Position = vec4(position,1.0);
-    }
-  `,
-  fragmentShader: `
-    varying vec2 vUv;
-    uniform float uTime;
-    void main(){
-      float r = length(vUv - 0.5);
-      float angle = atan(vUv.y-0.5, vUv.x-0.5);
-      float glow = 0.4 + 0.3*sin(uTime*0.5 + angle*3.0);
-      vec3 col = mix(vec3(0.05,0.05,0.1), vec3(0.2,0.5,0.8), smoothstep(0.2, 0.6, r));
-      col += vec3(0.5,0.2,0.8) * glow * (1.0-r);
-      gl_FragColor = vec4(col, 1.0);
-    }
-  `
-});
-const bgMesh = new THREE.Mesh(bgGeo, bgMat);
-const bgScene = new THREE.Scene();
-const bgCam = new THREE.Camera();
-bgScene.add(bgMesh);
-
 // --- 更新処理 ---
 function updateGlass(){
   if (!glassMesh) return;
   const elapsed = (Date.now() - startTime) / 1000;
-  const p = Math.min(elapsed / 30, 1.0); // ★ 30秒で透明化
+  const p = Math.min(elapsed / 30, 1.0); // 30秒で透明化
   const m = glassMesh.material;
   m.roughness = 0.4 * (1-p);
   m.transmission = 0.5 + 0.5 * p;
@@ -237,9 +215,6 @@ function updateGlass(){
 
 function updateBackground(){
   const t = (Date.now() - startTime) / 1000;
-
-  // 背景
-  bgMesh.material.uniforms.uTime.value = t;
 
   // 虹リング
   ringGroup.children.forEach((r,i) => {
@@ -252,12 +227,25 @@ function updateBackground(){
   auraMesh.material.uniforms.intensity.value = 1.0 + 0.6 * Math.sin(t*2.5);
   auraMesh.scale.setScalar(1.0 + 0.02*Math.sin(t*1.7));
 
-  // ホログラムリング
+  // ホログラムリング：時間で拡大・フェード
   holoGroup.children.forEach((ring,i)=>{
-    const s = 1.0 + 0.3*Math.sin(t*1.5+i);
-    ring.scale.setScalar(s);
-    ring.material.opacity = 0.3 + 0.3 * Math.sin(t*2 + i);
-    ring.material.color.setHSL((t*40+i*60)%360/360, 1.0, 0.6);
+    const data = ring.userData;
+    const elapsed = t - data.startTime;
+    if (elapsed < 0) return;
+
+    const scale = 1.0 + elapsed * data.speed * 8.0;
+    ring.scale.setScalar(scale);
+
+    const fade = Math.max(1.0 - elapsed*0.3, 0.0);
+    ring.material.opacity = fade * 0.6;
+
+    const hue = (t*20 + i*30) % 360 / 360;
+    ring.material.color.setHSL(hue, 1.0, 0.55);
+
+    if (fade <= 0.0){
+      data.startTime = t + Math.random()*2.0;
+      ring.scale.setScalar(1.0);
+    }
   });
 }
 
@@ -279,12 +267,6 @@ function animate(){
 
   updateGlass();
   updateBackground();
-
-  // ①背景
-  renderer.autoClear = false;
-  renderer.clear();
-  renderer.render(bgScene, bgCam);
-  // ②メイン
   renderer.render(scene, camera);
 }
 animate();
