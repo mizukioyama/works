@@ -9,31 +9,27 @@
   </style>
 </head>
 <body>
-  <!-- Three.js を最初に読み込む -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js"></script>
+  <!-- ✅ Three.js をCDNから読み込む -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
 
   <script>
     // === 基本セットアップ ===
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 0, 4);
+    camera.position.set(0, 0, 6);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setClearColor(0x000000); // 黒背景
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
     document.body.appendChild(renderer.domElement);
 
-    // === 虹色フレアリング用 CanvasTexture ===
-    function createRainbowFlareTexture(size = 512) {
+    // === 虹色リング用 CanvasTexture ===
+    function createRainbowTexture(size = 512) {
       const canvas = document.createElement("canvas");
       canvas.width = canvas.height = size;
       const ctx = canvas.getContext("2d");
       const r = size / 2;
 
+      // 円環の虹グラデーション
       const gradient = ctx.createConicGradient(0, r, r);
       gradient.addColorStop(0.0, "red");
       gradient.addColorStop(0.16, "orange");
@@ -48,17 +44,16 @@
       ctx.arc(r, r, r, 0, Math.PI * 2);
       ctx.fill();
 
-      const texture = new THREE.CanvasTexture(canvas);
-      return texture;
+      return new THREE.CanvasTexture(canvas);
     }
 
     // === フレアリング作成 ===
     function createFlareRing(radius) {
-      const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
+      const geo = new THREE.RingGeometry(radius * 0.95, radius, 128);
       const mat = new THREE.MeshBasicMaterial({
-        map: createRainbowFlareTexture(),
+        map: createRainbowTexture(),
         transparent: true,
-        opacity: 0.5,
+        opacity: 0.6,
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
         depthWrite: false
@@ -66,33 +61,26 @@
       return new THREE.Mesh(geo, mat);
     }
 
-    // === 背景フレア配置 ===
-    const bgGroup = new THREE.Group();
-    scene.add(bgGroup);
-
-    for (let i = 0; i < 6; i++) {
-      const ring = createFlareRing(2 + i * 0.6);
-      ring.position.z = -i * 0.4;
-      bgGroup.add(ring);
+    // === 背景リング配置 ===
+    const rings = [];
+    for (let i = 0; i < 8; i++) {
+      const ring = createFlareRing(2 + i * 0.5);
+      ring.rotation.x = Math.PI / 2.2;
+      scene.add(ring);
+      rings.push(ring);
     }
-
-    const startTime = Date.now();
 
     // === アニメーション ===
     function animate() {
       requestAnimationFrame(animate);
-
-      const t = (Date.now() - startTime) / 1000;
-      bgGroup.children.forEach((ring, i) => {
+      rings.forEach((ring, i) => {
         ring.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
-        ring.material.opacity = 0.25 + 0.2 * Math.sin(t * 2 + i);
       });
-
       renderer.render(scene, camera);
     }
     animate();
 
-    // リサイズ対応
+    // === リサイズ対応 ===
     window.addEventListener("resize", () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
