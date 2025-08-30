@@ -72,19 +72,19 @@ function makeGlass() {
 }
 makeGlass();
 
-// --- 鉄球 ---
+// --- クローム鉄球 ---
 let ironMesh;
 function makeIron() {
-  const radius = 0.8; // 鉄球サイズ
+  const radius = 0.8;
   const geo = new THREE.SphereGeometry(radius, 128, 128);
   const mat = new THREE.MeshPhysicalMaterial({
-    color: 0xcccccc,             // ★ 明るいシルバー
-    metalness: 1.0,              // ★ 完全に金属
-    roughness: 0.1,              // ★ 表面を滑らかに（鏡面反射っぽく）
-    envMap: cubeRT.texture,      // 環境マップ反射
-    envMapIntensity: 2.5,        // 反射強め
-    clearcoat: 1.0,              // 追加のコーティング層
-    clearcoatRoughness: 0.05     // ほぼ鏡面
+    color: 0xffffff,            // 純白 → 反射でクローム化
+    metalness: 1.0,             // 完全金属
+    roughness: 0.0,             // 鏡面
+    envMap: cubeRT.texture,     // 周囲を映す
+    envMapIntensity: 3.0,       // 反射強め
+    clearcoat: 1.0,             // コーティング層あり
+    clearcoatRoughness: 0.0     // 完全鏡面
   });
   ironMesh = new THREE.Mesh(geo, mat);
   ironMesh.renderOrder = 1;
