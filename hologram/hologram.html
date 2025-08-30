@@ -60,9 +60,9 @@ function makeGlass() {
   const mat = new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
     metalness: 0.0,
-    roughness: 0.05,             // 反射が映るように粗さを小さく
+    roughness: 0.25,             // 反射が映るように粗さを小さく
     transmission: 1.0,           // 完全に透過
-    ior: 1.5,                    // ガラスの屈折率
+    ior: 1.0,                    // ガラスの屈折率
     thickness: 0.6,              // 厚み
     transparent: true,
     opacity: 1.0,
