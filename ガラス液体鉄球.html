@@ -252,38 +252,50 @@ window.addEventListener("resize", () => {
 </html>
 
 
+scene.environment = hdrEnv;
+scene.background = hdrEnv;  // ← 背景も HDRI でほんのり幻想的にする
+
 const mat = new THREE.MeshPhysicalMaterial({
   color: 0xffffff,
   metalness: 1.0,
-  roughness: 0.05,     // 完全0だと真っ黒になることがあるので少し残す
-  envMap: cubeRT.texture,
-  envMapIntensity: 1.2,
+  roughness: 0.05,     // 完全0だと黒くなるので少し残す
+  envMap: cubeRT.texture,  // ← 映り込みはホログラムリング
+  envMapIntensity: 2.0,
   clearcoat: 1.0,
   clearcoatRoughness: 0.0
 });
 
-if (ironMesh) {
-  cubeCamera.position.copy(ironMesh.position);
+ringGroup.position.z = -2.5; // 鉄球の奥に配置して背景にする
 
-  // 一時的に鉄球＆ガラスを非表示 → リングだけキャプチャ
-  ironMesh.visible = false;
-  if (glassMesh) glassMesh.visible = false;
 
-  cubeCamera.update(renderer, scene);
-
-  // 復元
-  if (glassMesh) glassMesh.visible = true;
-  ironMesh.visible = true;
-
-  ironMesh.rotation.y += 0.01;
-  ironMesh.rotation.x += 0.005;
+// --- クローム鉄球 ---
+function makeIron() {
+  const geo = new THREE.SphereGeometry(0.8, 128, 128);
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff,
+    metalness: 1.0,
+    roughness: 0.05,
+    envMap: cubeRT.texture,
+    envMapIntensity: 2.0,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.0
+  });
+  ironMesh = new THREE.Mesh(geo, mat);
+  ironMesh.renderOrder = 1;
+  scene.add(ironMesh);
 }
 
+// --- 虹色リングを背景に配置 ---
+const ringGroup = new THREE.Group();
+ringGroup.position.z = -2.5; // 背景に回す
+...
+scene.add(ringGroup);
 
+// --- HDRI をライティング＋背景に利用 ---
 new RGBELoader()
   .setPath('https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/')
   .load('royal_esplanade_1k.hdr', (tex) => {
     tex.mapping = THREE.EquirectangularReflectionMapping;
-    hdrEnv = tex;
-    scene.environment = tex;  // 照明に使う
+    scene.environment = tex;   // 照明
+    scene.background = tex;    // 背景
   });

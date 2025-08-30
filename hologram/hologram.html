@@ -37,7 +37,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 // ライト
-scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 const dir = new THREE.DirectionalLight(0xffffff, 0.6);
 dir.position.set(3,4,5);
 scene.add(dir);
@@ -78,9 +78,9 @@ function makeIron() {
   const mat = new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
     metalness: 1.0,
-    roughness: 0.05,          // ← 少しだけ粗さを残すとシルバーに見える
-    envMap: cubeRT.texture,   // ← ホログラムリングだけが映り込む
-    envMapIntensity: 1.5,
+    roughness: 0.05,
+    envMap: cubeRT.texture,   // ★ 映り込みはホログラムリングだけ
+    envMapIntensity: 2.0,
     clearcoat: 1.0,
     clearcoatRoughness: 0.0
   });
@@ -90,7 +90,7 @@ function makeIron() {
 }
 makeIron();
 
-// --- 虹色リング ---
+// --- 虹色リング（背景に配置） ---
 function createRainbowRing(inner, outer, seg=256) {
   const geo = new THREE.RingGeometry(inner, outer, seg);
   const pos = geo.attributes.position;
@@ -116,8 +116,9 @@ function createRainbowRing(inner, outer, seg=256) {
   return mesh;
 }
 const ringGroup = new THREE.Group();
+ringGroup.position.z = -2.5;  // ★ 鉄球の奥に配置して背景化
 for (let i=0; i<4; i++){
-  const r = createRainbowRing(0.55 + i*0.06, 0.62 + i*0.06);
+  const r = createRainbowRing(2.0 + i*0.2, 2.2 + i*0.2);
   ringGroup.add(r);
 }
 scene.add(ringGroup);
@@ -188,7 +189,7 @@ new RGBELoader()
   .setPath('https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/')
   .load('royal_esplanade_1k.hdr', (tex) => {
     tex.mapping = THREE.EquirectangularReflectionMapping;
-    scene.environment = tex; // ← ライティング専用
+    scene.environment = tex; // 照明専用
   });
 
 // --- 更新処理 ---
