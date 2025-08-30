@@ -37,8 +37,8 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 // ライト
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+const dir = new THREE.DirectionalLight(0xffffff, 0.6);
 dir.position.set(3,4,5);
 scene.add(dir);
 
