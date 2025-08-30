@@ -77,7 +77,7 @@ function makeIron() {
   const mat = new THREE.MeshPhysicalMaterial({
     color: 0xffffff,          // 白（反射のみで色が付く）
     metalness: 1.0,           // 完全金属
-    roughness: 0.5,           // 鏡面
+    roughness: 0.0,           // 鏡面
     envMap: cubeRT.texture,   // 動的反射（後でHDRI背景も写し込む）
     envMapIntensity: 3.0,
     clearcoat: 1.0,
