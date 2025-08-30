@@ -54,23 +54,28 @@ scene.add(cubeCamera);
 // --- 共有変数 ---
 let glassMesh, ironMesh;
 
-// --- ガラス球 ---
+// --- ガラス球（リアルな質感） ---
 function makeGlass() {
-  const geo = new THREE.SphereGeometry(1.0, 64, 64);
+  const geo = new THREE.SphereGeometry(1.0, 128, 128);
   const mat = new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
     metalness: 0.0,
-    roughness: 0.8,
-    transmission: 0.6,
-    thickness: 0.5,
+    roughness: 0.05,             // 反射が映るように粗さを小さく
+    transmission: 1.0,           // 完全に透過
+    ior: 1.5,                    // ガラスの屈折率
+    thickness: 0.6,              // 厚み
     transparent: true,
-    opacity: 1.0
+    opacity: 1.0,
+    envMap: cubeRT.texture,      // ホログラムリングを映す
+    envMapIntensity: 1.2,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.0
   });
   glassMesh = new THREE.Mesh(geo, mat);
   glassMesh.renderOrder = 2;
   scene.add(glassMesh);
 }
-makeGlass();
+
 
 // --- クローム鉄球（鏡面シルバー） ---
 function makeIron() {
