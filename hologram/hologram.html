@@ -121,7 +121,7 @@ function createRainbowRing(inner, outer, seg=256) {
   return mesh;
 }
 const ringGroup = new THREE.Group();
-ringGroup.position.z = -2.5;  // ★ 鉄球の奥に配置して背景化
+ringGroup.position.z = 2.5;  // ★ 鉄球の奥に配置して背景化
 for (let i=0; i<4; i++){
   const r = createRainbowRing(2.0 + i*0.2, 2.2 + i*0.2);
   ringGroup.add(r);
