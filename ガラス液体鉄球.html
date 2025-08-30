@@ -252,22 +252,3 @@ window.addEventListener("resize", () => {
 </html>
 
 
-// --- クローム鉄球 ---
-let ironMesh;
-function makeIron() {
-  const radius = 0.8;
-  const geo = new THREE.SphereGeometry(radius, 128, 128);
-  const mat = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff,            // 純白 → 反射でクローム化
-    metalness: 1.0,             // 完全金属
-    roughness: 0.0,             // 鏡面
-    envMap: cubeRT.texture,     // 周囲を映す
-    envMapIntensity: 3.0,       // 反射強め
-    clearcoat: 1.0,             // コーティング層あり
-    clearcoatRoughness: 0.0     // 完全鏡面
-  });
-  ironMesh = new THREE.Mesh(geo, mat);
-  ironMesh.renderOrder = 1;
-  scene.add(ironMesh);
-}
-makeIron();
