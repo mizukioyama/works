@@ -252,3 +252,25 @@ window.addEventListener("resize", () => {
 </html>
 
 
+new RGBELoader()
+  .setPath('https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/')
+  .load('royal_esplanade_1k.hdr', (tex) => {
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    hdrEnv = tex;
+    scene.environment = tex; // ライティング用
+    ironMesh.material.envMap = tex;   // ← HDRI を直接反射に使用
+    ironMesh.material.envMapIntensity = 1.5;
+    ironMesh.material.needsUpdate = true;
+  });
+
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+
+
+const mat = new THREE.MeshPhysicalMaterial({
+  color: 0xffffff,
+  metalness: 1.0,
+  roughness: 0.0,
+  envMapIntensity: 1.5
+});
