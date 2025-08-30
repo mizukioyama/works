@@ -9,7 +9,7 @@
   </style>
 </head>
 <body>
-  <!-- ✅ Three.js をCDNから読み込む -->
+  <!-- Three.js をCDNから読み込む -->
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
 
   <script>
@@ -22,50 +22,46 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // === 虹色リング用 CanvasTexture ===
-    function createRainbowTexture(size = 512) {
-      const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = size;
-      const ctx = canvas.getContext("2d");
-      const r = size / 2;
-
-      // 円環の虹グラデーション
-      const gradient = ctx.createConicGradient(0, r, r);
-      gradient.addColorStop(0.0, "red");
-      gradient.addColorStop(0.16, "orange");
-      gradient.addColorStop(0.33, "yellow");
-      gradient.addColorStop(0.5, "green");
-      gradient.addColorStop(0.66, "cyan");
-      gradient.addColorStop(0.83, "blue");
-      gradient.addColorStop(1.0, "magenta");
-
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(r, r, r, 0, Math.PI * 2);
-      ctx.fill();
-
-      return new THREE.CanvasTexture(canvas);
-    }
-
-    // === フレアリング作成 ===
-    function createFlareRing(radius) {
-      const geo = new THREE.RingGeometry(radius * 0.95, radius, 128);
-      const mat = new THREE.MeshBasicMaterial({
-        map: createRainbowTexture(),
+    // === グロー効果付きリング用マテリアル ===
+    function createGlowMaterial(color, opacity=0.5) {
+      return new THREE.MeshBasicMaterial({
+        color: color,
         transparent: true,
-        opacity: 0.6,
+        opacity: opacity,
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
         depthWrite: false
       });
-      return new THREE.Mesh(geo, mat);
     }
+
+    // === リング作成 ===
+    function createHoloRing(inner, outer, color) {
+      const geo = new THREE.RingGeometry(inner, outer, 128);
+      const mat = createGlowMaterial(color, 0.4);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = Math.PI / 2.2;
+      return mesh;
+    }
+
+    // === 中央の光球 ===
+    const sphereGeo = new THREE.SphereGeometry(0.6, 64, 64);
+    const sphereMat = new THREE.MeshBasicMaterial({
+      color: 0x00ffff,
+      transparent: true,
+      opacity: 0.2,
+      blending: THREE.AdditiveBlending
+    });
+    const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+    scene.add(sphere);
 
     // === 背景リング配置 ===
     const rings = [];
-    for (let i = 0; i < 8; i++) {
-      const ring = createFlareRing(2 + i * 0.5);
-      ring.rotation.x = Math.PI / 2.2;
+    const colors = [0x00ffff, 0x66ccff, 0xaa88ff, 0xff00ff]; // 青〜紫系
+    for (let i = 0; i < 12; i++) {
+      const inner = 1.5 + i * 0.4;
+      const outer = inner + 0.08;
+      const color = colors[i % colors.length];
+      const ring = createHoloRing(inner, outer, color);
       scene.add(ring);
       rings.push(ring);
     }
@@ -74,8 +70,10 @@
     function animate() {
       requestAnimationFrame(animate);
       rings.forEach((ring, i) => {
-        ring.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
+        ring.rotation.z += 0.0015 * (i % 2 === 0 ? 1 : -1);
+        ring.material.opacity = 0.2 + 0.2 * Math.sin(Date.now() * 0.001 + i);
       });
+      sphere.material.opacity = 0.15 + 0.1 * Math.sin(Date.now() * 0.002);
       renderer.render(scene, camera);
     }
     animate();
