@@ -252,25 +252,38 @@ window.addEventListener("resize", () => {
 </html>
 
 
+const mat = new THREE.MeshPhysicalMaterial({
+  color: 0xffffff,
+  metalness: 1.0,
+  roughness: 0.05,     // 完全0だと真っ黒になることがあるので少し残す
+  envMap: cubeRT.texture,
+  envMapIntensity: 1.2,
+  clearcoat: 1.0,
+  clearcoatRoughness: 0.0
+});
+
+if (ironMesh) {
+  cubeCamera.position.copy(ironMesh.position);
+
+  // 一時的に鉄球＆ガラスを非表示 → リングだけキャプチャ
+  ironMesh.visible = false;
+  if (glassMesh) glassMesh.visible = false;
+
+  cubeCamera.update(renderer, scene);
+
+  // 復元
+  if (glassMesh) glassMesh.visible = true;
+  ironMesh.visible = true;
+
+  ironMesh.rotation.y += 0.01;
+  ironMesh.rotation.x += 0.005;
+}
+
+
 new RGBELoader()
   .setPath('https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/')
   .load('royal_esplanade_1k.hdr', (tex) => {
     tex.mapping = THREE.EquirectangularReflectionMapping;
     hdrEnv = tex;
-    scene.environment = tex; // ライティング用
-    ironMesh.material.envMap = tex;   // ← HDRI を直接反射に使用
-    ironMesh.material.envMapIntensity = 1.5;
-    ironMesh.material.needsUpdate = true;
+    scene.environment = tex;  // 照明に使う
   });
-
-
-  scene.add(new THREE.AmbientLight(0xffffff, 0.2));
-const dir = new THREE.DirectionalLight(0xffffff, 0.6);
-
-
-const mat = new THREE.MeshPhysicalMaterial({
-  color: 0xffffff,
-  metalness: 1.0,
-  roughness: 0.0,
-  envMapIntensity: 1.5
-});
