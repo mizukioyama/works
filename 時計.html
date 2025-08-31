@@ -4,7 +4,11 @@
   <meta charset="utf-8">
   <title>ホログラムリング背景</title>
   <style>
-    body { margin:0; overflow:hidden; background:black; }
+    body { 
+      margin:0; 
+      overflow:hidden; 
+      background: radial-gradient(circle at center, #222 0%, #111 100%);
+    }
     canvas { display:block; }
   </style>
 </head>
@@ -16,9 +20,9 @@
     // === 基本セットアップ ===
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 0, 6);
+    camera.position.set(0, 0, 7);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
@@ -37,18 +41,18 @@
     // === リング作成 ===
     function createHoloRing(inner, outer, color) {
       const geo = new THREE.RingGeometry(inner, outer, 128);
-      const mat = createGlowMaterial(color, 0.4);
+      const mat = createGlowMaterial(color, 0.35);
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.rotation.x = Math.PI / 2.2;
+      mesh.rotation.x = Math.PI / 2.4;
       return mesh;
     }
 
     // === 中央の光球 ===
     const sphereGeo = new THREE.SphereGeometry(0.6, 64, 64);
     const sphereMat = new THREE.MeshBasicMaterial({
-      color: 0x00ffff,
+      color: 0x88ccff,
       transparent: true,
-      opacity: 0.2,
+      opacity: 0.25,
       blending: THREE.AdditiveBlending
     });
     const sphere = new THREE.Mesh(sphereGeo, sphereMat);
@@ -56,10 +60,10 @@
 
     // === 背景リング配置 ===
     const rings = [];
-    const colors = [0x00ffff, 0x66ccff, 0xaa88ff, 0xff00ff]; // 青〜紫系
-    for (let i = 0; i < 12; i++) {
-      const inner = 1.5 + i * 0.4;
-      const outer = inner + 0.08;
+    const colors = [0x00ffff, 0x33bbff, 0x6699ff]; // シアン〜青系
+    for (let i = 0; i < 10; i++) {
+      const inner = 1.5 + i * 0.5;
+      const outer = inner + 0.1;
       const color = colors[i % colors.length];
       const ring = createHoloRing(inner, outer, color);
       scene.add(ring);
@@ -70,8 +74,8 @@
     function animate() {
       requestAnimationFrame(animate);
       rings.forEach((ring, i) => {
-        ring.rotation.z += 0.0015 * (i % 2 === 0 ? 1 : -1);
-        ring.material.opacity = 0.2 + 0.2 * Math.sin(Date.now() * 0.001 + i);
+        ring.rotation.z += 0.001 * (i % 2 === 0 ? 1 : -1);
+        ring.material.opacity = 0.15 + 0.2 * Math.sin(Date.now() * 0.001 + i);
       });
       sphere.material.opacity = 0.15 + 0.1 * Math.sin(Date.now() * 0.002);
       renderer.render(scene, camera);
