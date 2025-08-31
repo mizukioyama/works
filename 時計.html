@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>幻想的な時計リング</title>
+  <title>光球と同期リング</title>
   <style>
     body { margin:0; overflow:hidden; background:black; }
     canvas { display:block; }
@@ -22,7 +22,7 @@ import * as THREE from "three";
 // === 基本セットアップ ===
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 20000);
-camera.position.z = 12;
+camera.position.z = 15;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -37,19 +37,20 @@ function createGlowTexture(size = 1024) {
 
   const gradient = ctx.createRadialGradient(r, r, r*0.05, r, r, r);
   gradient.addColorStop(0.0, "rgba(255,255,255,1.0)");
-  gradient.addColorStop(0.3, "rgba(255,255,220,0.7)");
-  gradient.addColorStop(0.6, "rgba(200,220,255,0.3)");
+  gradient.addColorStop(0.3, "rgba(255,255,220,0.6)");
+  gradient.addColorStop(0.6, "rgba(200,220,255,0.25)");
   gradient.addColorStop(1.0, "rgba(0,0,0,0)");
 
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, size, size);
 
-  return new THREE.CanvasTexture(canvas);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
 }
 
 // === 光球本体 ===
-const baseSize = 5.0; // 光球とリングの基準直径
-const coreGeo = new THREE.PlaneGeometry(baseSize, baseSize);
+const coreGeo = new THREE.PlaneGeometry(2.5, 2.5);
 const coreMat = new THREE.MeshBasicMaterial({
   map: createGlowTexture(),
   transparent: true,
@@ -67,20 +68,21 @@ function createRingTexture(size = 1024) {
   const ctx = canvas.getContext("2d");
   const r = size / 2;
 
+  // 虹色グラデーション
   const gradient = ctx.createConicGradient(0, r, r);
-  gradient.addColorStop(0.0, "rgba(255,0,0,0.3)");
-  gradient.addColorStop(0.2, "rgba(255,255,0,0.3)");
-  gradient.addColorStop(0.4, "rgba(0,255,255,0.3)");
-  gradient.addColorStop(0.6, "rgba(0,128,255,0.3)");
-  gradient.addColorStop(0.8, "rgba(255,0,255,0.3)");
-  gradient.addColorStop(1.0, "rgba(255,0,0,0.3)");
+  gradient.addColorStop(0.0, "rgba(255,0,0,0.25)");
+  gradient.addColorStop(0.2, "rgba(255,255,0,0.25)");
+  gradient.addColorStop(0.4, "rgba(0,255,255,0.25)");
+  gradient.addColorStop(0.6, "rgba(0,128,255,0.25)");
+  gradient.addColorStop(0.8, "rgba(255,0,255,0.25)");
+  gradient.addColorStop(1.0, "rgba(255,0,0,0.25)");
 
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.arc(r, r, r, 0, Math.PI * 2);
   ctx.fill();
 
-  // 内側を透明に
+  // 内側を抜いてリング化
   const mask = ctx.createRadialGradient(r, r, r*0.5, r, r, r);
   mask.addColorStop(0.0, "rgba(0,0,0,0)");
   mask.addColorStop(0.7, "rgba(0,0,0,1)");
@@ -89,32 +91,33 @@ function createRingTexture(size = 1024) {
   ctx.fillStyle = mask;
   ctx.fillRect(0,0,size,size);
 
-  return new THREE.CanvasTexture(canvas);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
 }
 
 // === リング作成 ===
-function createFlareRing(diameter) {
-  const geo = new THREE.PlaneGeometry(diameter, diameter);
+function createFlareRing() {
+  const geo = new THREE.PlaneGeometry(2.5, 2.5); // 初期はコアと同じ
   const mat = new THREE.MeshBasicMaterial({
     map: createRingTexture(),
     transparent: true,
     opacity: 0.6,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
-    depthWrite: false
+    depthWrite: true
   });
   return new THREE.Mesh(geo, mat);
 }
 
-// === 光球と同じサイズのリング ===
-const secRing = createFlareRing(baseSize);
-const minRing = createFlareRing(baseSize);
-const hourRing = createFlareRing(baseSize);
-
+// === リング ===
+const secRing = createFlareRing();
+const minRing = createFlareRing();
+const hourRing = createFlareRing();
 scene.add(secRing, minRing, hourRing);
 
 // === 時間管理 ===
-const startDate = new Date();
+const startDate = new Date(); 
 const maxYears = 100;
 const maxSizePx = 10000;
 
@@ -124,12 +127,12 @@ function animate() {
   const now = new Date();
   const elapsedMs = now - startDate;
 
-  // 中央光球を「100年で10000px」に拡大
+  // 中央光球スケーリング
   const yearsPassed = elapsedMs / (1000*60*60*24*365);
-  const scale = Math.min(1 + (yearsPassed/maxYears) * (maxSizePx/baseSize), maxSizePx/baseSize);
+  const scale = Math.min(1 + (yearsPassed/maxYears) * (maxSizePx/2.5), maxSizePx/2.5);
   core.scale.set(scale, scale, 1);
 
-  // リングも光球に合わせてスケーリング
+  // リングを光球サイズに合わせる
   secRing.scale.set(scale, scale, 1);
   minRing.scale.set(scale, scale, 1);
   hourRing.scale.set(scale, scale, 1);
