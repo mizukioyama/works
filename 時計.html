@@ -26,10 +26,10 @@ camera.position.z = 10;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x222222, 1); // 幻想的な灰色
+renderer.setClearColor(0xeeeeee, 1); // 白寄りの灰色
 document.body.appendChild(renderer.domElement);
 
-// === 光球テクスチャ（幻想的に強化） ===
+// === 光球テクスチャ ===
 function createGlowTexture(size = 1024) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
@@ -37,11 +37,11 @@ function createGlowTexture(size = 1024) {
   const r = size / 2;
 
   const gradient = ctx.createRadialGradient(r, r, r*0.05, r, r, r);
-  gradient.addColorStop(0.0, "rgba(255,255,255,1.0)");   // 強い中心
-  gradient.addColorStop(0.2, "rgba(200,240,255,0.8)");   // 青白い光
-  gradient.addColorStop(0.5, "rgba(150,200,255,0.4)");   // 淡い青
-  gradient.addColorStop(0.8, "rgba(100,150,255,0.2)");   // さらに淡く
-  gradient.addColorStop(1.0, "rgba(0,0,0,0)");           // 消える
+  gradient.addColorStop(0.0, "rgba(255,255,255,1.0)");
+  gradient.addColorStop(0.2, "rgba(220,240,255,0.7)");
+  gradient.addColorStop(0.5, "rgba(180,200,255,0.35)");
+  gradient.addColorStop(0.8, "rgba(150,180,255,0.15)");
+  gradient.addColorStop(1.0, "rgba(0,0,0,0)");
 
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, size, size);
@@ -49,7 +49,7 @@ function createGlowTexture(size = 1024) {
   return new THREE.CanvasTexture(canvas);
 }
 
-// === 光球本体（幻想的な層付き） ===
+// === 光球本体 ===
 function createCore() {
   const group = new THREE.Group();
 
@@ -65,12 +65,12 @@ function createCore() {
   const core = new THREE.Mesh(coreGeo, coreMat);
   group.add(core);
 
-  // 外側の淡いオーラ（少し大きい）
+  // 外側の淡いオーラ
   const auraGeo = new THREE.PlaneGeometry(4.5, 4.5);
   const auraMat = new THREE.MeshBasicMaterial({
     map: createGlowTexture(),
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.4,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
@@ -83,29 +83,31 @@ function createCore() {
 const core = createCore();
 scene.add(core);
 
-// === リング（前回と同じ関数） ===
+// === リングテクスチャ（境界を淡く） ===
 function createRingTexture(size = 1024) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext("2d");
   const r = size / 2;
 
+  // 虹色グラデーション
   const gradient = ctx.createConicGradient(0, r, r);
-  gradient.addColorStop(0.0, "rgba(255,0,0,0.25)");
-  gradient.addColorStop(0.2, "rgba(255,255,0,0.25)");
-  gradient.addColorStop(0.4, "rgba(0,255,255,0.25)");
-  gradient.addColorStop(0.6, "rgba(0,128,255,0.25)");
-  gradient.addColorStop(0.8, "rgba(255,0,255,0.25)");
-  gradient.addColorStop(1.0, "rgba(255,0,0,0.25)");
+  gradient.addColorStop(0.0, "rgba(255,0,0,0.18)");
+  gradient.addColorStop(0.2, "rgba(255,255,0,0.18)");
+  gradient.addColorStop(0.4, "rgba(0,255,255,0.18)");
+  gradient.addColorStop(0.6, "rgba(0,128,255,0.18)");
+  gradient.addColorStop(0.8, "rgba(255,0,255,0.18)");
+  gradient.addColorStop(1.0, "rgba(255,0,0,0.18)");
 
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.arc(r, r, r, 0, Math.PI * 2);
   ctx.fill();
 
-  const mask = ctx.createRadialGradient(r, r, r*0.5, r, r, r);
+  // 内側を抜いてリング化（境界を淡く）
+  const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
   mask.addColorStop(0.0, "rgba(0,0,0,0)");
-  mask.addColorStop(0.7, "rgba(0,0,0,1)");
+  mask.addColorStop(0.5, "rgba(0,0,0,0.7)");
   mask.addColorStop(1.0, "rgba(0,0,0,0)");
   ctx.globalCompositeOperation = "destination-in";
   ctx.fillStyle = mask;
@@ -119,7 +121,7 @@ function createFlareRing(radius) {
   const mat = new THREE.MeshBasicMaterial({
     map: createRingTexture(),
     transparent: true,
-    opacity: 0.6,
+    opacity: 0.5, // さらに淡く
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: true
@@ -127,7 +129,7 @@ function createFlareRing(radius) {
   return new THREE.Mesh(geo, mat);
 }
 
-// === 時計リング（光球にフィット） ===
+// === 時計リング ===
 const secRing = createFlareRing(1.4);
 const minRing = createFlareRing(1.7);
 const hourRing = createFlareRing(2.0);
