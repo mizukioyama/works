@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>幻想的な回転リング</title>
+  <title>時計のような回転リング</title>
   <style>
     body { margin:0; overflow:hidden; background:black; }
     canvas { display:block; }
@@ -22,13 +22,13 @@ import * as THREE from "three";
 // === 基本セットアップ ===
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.z = 6;
+camera.position.z = 8;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// === 光球テクスチャ ===
+// === 中央の発光コア ===
 function createGlowTexture(size = 1024) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
@@ -49,8 +49,7 @@ function createGlowTexture(size = 1024) {
   return tex;
 }
 
-// === 光球本体 ===
-const coreGeo = new THREE.PlaneGeometry(2.5, 2.5);
+const coreGeo = new THREE.PlaneGeometry(3, 3);
 const coreMat = new THREE.MeshBasicMaterial({
   map: createGlowTexture(),
   transparent: true,
@@ -60,48 +59,33 @@ const coreMat = new THREE.MeshBasicMaterial({
 const core = new THREE.Mesh(coreGeo, coreMat);
 scene.add(core);
 
-// === リング用 CanvasTexture ===
-function createRingTexture(size = 512) {
+// === リング用テクスチャ ===
+function createRingTexture(color, size = 512) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext("2d");
   const r = size / 2;
 
-  // 虹色の円環
-  const gradient = ctx.createConicGradient(0, r, r);
-  gradient.addColorStop(0.0, "rgba(255,0,0,0.4)");
-  gradient.addColorStop(0.2, "rgba(255,255,0,0.4)");
-  gradient.addColorStop(0.4, "rgba(0,255,255,0.4)");
-  gradient.addColorStop(0.6, "rgba(0,128,255,0.4)");
-  gradient.addColorStop(0.8, "rgba(255,0,255,0.4)");
-  gradient.addColorStop(1.0, "rgba(255,0,0,0.4)");
+  const gradient = ctx.createRadialGradient(r, r, r*0.7, r, r, r);
+  gradient.addColorStop(0.7, color);
+  gradient.addColorStop(1.0, "rgba(0,0,0,0)");
 
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.arc(r, r, r, 0, Math.PI * 2);
   ctx.fill();
 
-  // 内側を透明にしてリング化
-  const mask = ctx.createRadialGradient(r, r, r*0.6, r, r, r);
-  mask.addColorStop(0.0, "rgba(0,0,0,0)");
-  mask.addColorStop(0.8, "rgba(0,0,0,1)");
-  mask.addColorStop(1.0, "rgba(0,0,0,0)");
-  ctx.globalCompositeOperation = "destination-in";
-  ctx.fillStyle = mask;
-  ctx.fillRect(0,0,size,size);
-
   const tex = new THREE.CanvasTexture(canvas);
   tex.needsUpdate = true;
   return tex;
 }
 
-// === リング作成 ===
-function createFlareRing(radius) {
-  const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
+// === 各リング ===
+function createClockRing(radius, color) {
+  const geo = new THREE.PlaneGeometry(radius*2, radius*2);
   const mat = new THREE.MeshBasicMaterial({
-    map: createRingTexture(),
+    map: createRingTexture(color),
     transparent: true,
-    opacity: 0.4,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
@@ -109,22 +93,29 @@ function createFlareRing(radius) {
   return new THREE.Mesh(geo, mat);
 }
 
-// === 複数リング配置 ===
-const bgGroup = new THREE.Group();
-scene.add(bgGroup);
+// 秒・分・時リングを作成
+const secRing = createClockRing(5, "rgba(0,255,255,0.6)");
+const minRing = createClockRing(6, "rgba(255,100,255,0.5)");
+const hourRing = createClockRing(7, "rgba(255,200,100,0.4)");
 
-for (let i = 0; i < 5; i++) {
-  const ring = createFlareRing(3 + i * 1.0);
-  ring.position.z = -i * 0.3;
-  bgGroup.add(ring);
-}
+scene.add(secRing);
+scene.add(minRing);
+scene.add(hourRing);
 
 // === アニメーション ===
 function animate() {
   requestAnimationFrame(animate);
-  bgGroup.children.forEach((ring, i) => {
-    ring.rotation.z += 0.001 * (i % 2 === 0 ? 1 : -1);
-  });
+
+  const now = new Date();
+  const seconds = now.getSeconds() + now.getMilliseconds()/1000;
+  const minutes = now.getMinutes() + seconds/60;
+  const hours   = now.getHours() % 12 + minutes/60;
+
+  // 時計のように回転
+  secRing.rotation.z = - (seconds / 60) * Math.PI * 2;
+  minRing.rotation.z = - (minutes / 60) * Math.PI * 2;
+  hourRing.rotation.z = - (hours / 12) * Math.PI * 2;
+
   renderer.render(scene, camera);
 }
 animate();
