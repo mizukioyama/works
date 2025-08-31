@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <title>幻想的ホログラムリング</title>
   <style>
-    body { margin:0; overflow:hidden; background:#1a1a1a; } /* 幻想的な灰色 */
+    body { margin:0; overflow:hidden; background:#2a2a32; } /* 淡い灰色背景 */
     canvas { display:block; }
   </style>
 </head>
@@ -21,34 +21,34 @@
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setClearColor(0x1a1a1a); // 背景：幻想的な灰色
+    renderer.setClearColor(0x2a2a32); // 幻想的な灰色
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.3;
+    renderer.toneMappingExposure = 1.1;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     document.body.appendChild(renderer.domElement);
 
-    // === ホログラム風テクスチャ生成 ===
-    function createHoloRingTexture(size = 512) {
+    // === 淡いホログラム風テクスチャ ===
+    function createSoftRingTexture(size = 512) {
       const canvas = document.createElement("canvas");
       canvas.width = canvas.height = size;
       const ctx = canvas.getContext("2d");
 
       const r = size / 2;
 
-      // 放射状グラデーション（外側フェード）
-      const radial = ctx.createRadialGradient(r, r, r*0.3, r, r, r);
-      radial.addColorStop(0.0, "rgba(255,255,255,0.9)");   // 内側強く
-      radial.addColorStop(0.5, "rgba(0,255,255,0.6)");    // シアン
-      radial.addColorStop(0.75, "rgba(255,0,255,0.4)");   // マゼンタ
-      radial.addColorStop(1.0, "rgba(0,0,0,0.0)");        // 外側消える
+      // 放射状の柔らかいグラデーション
+      const radial = ctx.createRadialGradient(r, r, r*0.2, r, r, r);
+      radial.addColorStop(0.0, "rgba(255,255,255,0.6)");
+      radial.addColorStop(0.4, "rgba(180,220,255,0.3)"); // 淡い青
+      radial.addColorStop(0.7, "rgba(200,180,255,0.2)"); // 淡い紫
+      radial.addColorStop(1.0, "rgba(0,0,0,0.0)");
 
-      // コニック（円環状）グラデーション
+      // コニック（環状グラデーション、淡い色）
       const conic = ctx.createConicGradient(0, r, r);
-      conic.addColorStop(0.0, "cyan");
-      conic.addColorStop(0.25, "magenta");
-      conic.addColorStop(0.5, "blueviolet");
-      conic.addColorStop(0.75, "deepskyblue");
-      conic.addColorStop(1.0, "cyan");
+      conic.addColorStop(0.0, "rgba(180,240,255,0.3)");
+      conic.addColorStop(0.25, "rgba(220,180,255,0.25)");
+      conic.addColorStop(0.5, "rgba(150,200,255,0.3)");
+      conic.addColorStop(0.75, "rgba(200,180,255,0.25)");
+      conic.addColorStop(1.0, "rgba(180,240,255,0.3)");
 
       // conic 塗り
       ctx.fillStyle = conic;
@@ -56,7 +56,7 @@
       ctx.arc(r, r, r, 0, Math.PI * 2);
       ctx.fill();
 
-      // radial をブレンド
+      // radial を重ねる（ふんわり）
       ctx.globalCompositeOperation = "lighter";
       ctx.fillStyle = radial;
       ctx.beginPath();
@@ -70,12 +70,12 @@
     }
 
     // === リング作成 ===
-    function createHoloRing(radius) {
+    function createSoftRing(radius) {
       const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
       const mat = new THREE.MeshBasicMaterial({
-        map: createHoloRingTexture(),
+        map: createSoftRingTexture(),
         transparent: true,
-        opacity: 0.6,
+        opacity: 0.35, // 淡く表示
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
         depthWrite: false
@@ -88,7 +88,7 @@
     scene.add(bgGroup);
 
     for (let i = 0; i < 10; i++) {
-      const ring = createHoloRing(2 + i * 0.8);
+      const ring = createSoftRing(2 + i * 0.8);
       ring.position.z = -i * 0.5;
       bgGroup.add(ring);
     }
@@ -96,11 +96,9 @@
     // === アニメーション（回転のみ） ===
     function animate() {
       requestAnimationFrame(animate);
-
       bgGroup.children.forEach((ring, i) => {
-        ring.rotation.z += 0.0015 * (i % 2 === 0 ? 1 : -1); // 交互に回転
+        ring.rotation.z += 0.001 * (i % 2 === 0 ? 1 : -1); // ゆっくり交互に回転
       });
-
       renderer.render(scene, camera);
     }
     animate();
