@@ -4,80 +4,91 @@
   <meta charset="utf-8">
   <title>ホログラムリング背景</title>
   <style>
-    body { 
-      margin:0; 
-      overflow:hidden; 
-      background: radial-gradient(circle at center, #222 0%, #111 100%);
-    }
+    body { margin:0; overflow:hidden; background:#222; } /* 幻想的な灰色 */
     canvas { display:block; }
   </style>
 </head>
 <body>
-  <!-- Three.js をCDNから読み込む -->
+  <!-- Three.js 読み込み -->
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
 
   <script>
     // === 基本セットアップ ===
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 0, 7);
+    camera.position.set(0, 0, 6);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x222222); // 背景を灰色
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     document.body.appendChild(renderer.domElement);
 
-    // === グロー効果付きリング用マテリアル ===
-    function createGlowMaterial(color, opacity=0.5) {
-      return new THREE.MeshBasicMaterial({
-        color: color,
+    const startTime = Date.now();
+
+    // === 虹色フレアリング用 CanvasTexture ===
+    function createRainbowFlareTexture(size = 512) {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext("2d");
+
+      const r = size / 2;
+      const gradient = ctx.createConicGradient(0, r, r);
+      gradient.addColorStop(0.0, "cyan");
+      gradient.addColorStop(0.25, "blue");
+      gradient.addColorStop(0.5, "magenta");
+      gradient.addColorStop(0.75, "purple");
+      gradient.addColorStop(1.0, "cyan");
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(r, r, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    // === フレアリング作成 ===
+    function createFlareRing(radius) {
+      const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
+      const mat = new THREE.MeshBasicMaterial({
+        map: createRainbowFlareTexture(),
         transparent: true,
-        opacity: opacity,
+        opacity: 0.4,
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
         depthWrite: false
       });
-    }
-
-    // === リング作成 ===
-    function createHoloRing(inner, outer, color) {
-      const geo = new THREE.RingGeometry(inner, outer, 128);
-      const mat = createGlowMaterial(color, 0.35);
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.rotation.x = Math.PI / 2.4;
       return mesh;
     }
 
-    // === 中央の光球 ===
-    const sphereGeo = new THREE.SphereGeometry(0.6, 64, 64);
-    const sphereMat = new THREE.MeshBasicMaterial({
-      color: 0x88ccff,
-      transparent: true,
-      opacity: 0.25,
-      blending: THREE.AdditiveBlending
-    });
-    const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-    scene.add(sphere);
+    // === 背景フレア配置 ===
+    const bgGroup = new THREE.Group();
+    scene.add(bgGroup);
 
-    // === 背景リング配置 ===
-    const rings = [];
-    const colors = [0x00ffff, 0x33bbff, 0x6699ff]; // シアン〜青系
-    for (let i = 0; i < 10; i++) {
-      const inner = 1.5 + i * 0.5;
-      const outer = inner + 0.1;
-      const color = colors[i % colors.length];
-      const ring = createHoloRing(inner, outer, color);
-      scene.add(ring);
-      rings.push(ring);
+    for (let i = 0; i < 8; i++) {
+      const ring = createFlareRing(2 + i * 0.7);
+      ring.position.z = -i * 0.4;
+      bgGroup.add(ring);
     }
 
     // === アニメーション ===
     function animate() {
       requestAnimationFrame(animate);
-      rings.forEach((ring, i) => {
-        ring.rotation.z += 0.001 * (i % 2 === 0 ? 1 : -1);
-        ring.material.opacity = 0.15 + 0.2 * Math.sin(Date.now() * 0.001 + i);
+      const t = (Date.now() - startTime) / 1000;
+
+      bgGroup.children.forEach((ring, i) => {
+        ring.rotation.z += 0.0015 * (i % 2 === 0 ? 1 : -1);
+        ring.material.opacity = 0.25 + 0.15 * Math.sin(t * 2 + i);
       });
-      sphere.material.opacity = 0.15 + 0.1 * Math.sin(Date.now() * 0.002);
+
       renderer.render(scene, camera);
     }
     animate();
