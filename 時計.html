@@ -21,8 +21,8 @@ import * as THREE from "three";
 
 // === 基本セットアップ ===
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.z = 6;
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100000);
+camera.position.z = 8000; // 大きくなるので初期距離を大きめに
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -48,71 +48,40 @@ function createGlowTexture(size = 1024) {
 }
 
 // === 光球本体 ===
-const coreGeo = new THREE.PlaneGeometry(2.5, 2.5);
+const coreGeo = new THREE.PlaneGeometry(1, 1); // 基本サイズは直径1px
 const coreMat = new THREE.MeshBasicMaterial({
   map: createGlowTexture(),
   transparent: true,
   blending: THREE.AdditiveBlending,
-  depthWrite: true, // 奥行きを判定させる
+  depthWrite: true,
   side: THREE.DoubleSide
 });
 const core = new THREE.Mesh(coreGeo, coreMat);
 scene.add(core);
 
-// === リングテクスチャ ===
-function createRingTexture(size = 512, colorStops) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  const r = size / 2;
-
-  const gradient = ctx.createConicGradient(0, r, r);
-  colorStops.forEach(([pos, col]) => gradient.addColorStop(pos, col));
-
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(r, r, r, 0, Math.PI*2);
-  ctx.fill();
-
-  const mask = ctx.createRadialGradient(r, r, r*0.6, r, r, r);
-  mask.addColorStop(0.0, "rgba(0,0,0,0)");
-  mask.addColorStop(0.8, "rgba(0,0,0,1)");
-  mask.addColorStop(1.0, "rgba(0,0,0,0)");
-  ctx.globalCompositeOperation = "destination-in";
-  ctx.fillStyle = mask;
-  ctx.fillRect(0,0,size,size);
-
-  return new THREE.CanvasTexture(canvas);
-}
-
-// === リング作成 ===
-function createFlareRing(radius, colorStops) {
-  const geo = new THREE.PlaneGeometry(radius*2, radius*2);
+// === リング作成関数 ===
+function createRing(radius, color) {
+  const geo = new THREE.RingGeometry(radius*0.95, radius, 128);
   const mat = new THREE.MeshBasicMaterial({
-    map: createRingTexture(512, colorStops),
+    color: color,
     transparent: true,
-    opacity: 0.5,
-    depthWrite: true, // 奥行きを判定させる
-    side: THREE.DoubleSide
+    opacity: 0.3,
+    side: THREE.DoubleSide,
+    depthWrite: true
   });
   return new THREE.Mesh(geo, mat);
 }
 
-// === 時計用リング ===
-const secRing = createFlareRing(3.0, [
-  [0.0,"rgba(255,100,100,0.6)"], [1.0,"rgba(255,100,100,0.6)"]
-]);
-const minRing = createFlareRing(3.6, [
-  [0.0,"rgba(100,255,100,0.6)"], [1.0,"rgba(100,255,100,0.6)"]
-]);
-const hourRing = createFlareRing(4.2, [
-  [0.0,"rgba(100,100,255,0.6)"], [1.0,"rgba(100,100,255,0.6)"]
-]);
+// 時計リング
+const secRing = createRing(3000, 0xff6666);
+const minRing = createRing(3600, 0x66ff66);
+const hourRing = createRing(4200, 0x6666ff);
 
 scene.add(secRing, minRing, hourRing);
 
 // === アニメーション ===
 let startTime = Date.now();
+const secondsInYear = 60 * 60 * 24 * 365; // おおよそ1年の秒数
 
 function animate() {
   requestAnimationFrame(animate);
@@ -121,14 +90,19 @@ function animate() {
   const minutes = now.getMinutes() + seconds/60;
   const hours = now.getHours()%12 + minutes/60;
 
-  // 時計回転
+  // 時計リング回転
   secRing.rotation.z = - (seconds/60) * 2*Math.PI;
   minRing.rotation.z = - (minutes/60) * 2*Math.PI;
   hourRing.rotation.z = - (hours/12) * 2*Math.PI;
 
-  // 中央光球を「1秒ごとに1mm拡大」
+  // 経過秒数
   const elapsedSec = (Date.now() - startTime)/1000;
-  const scale = 1.0 + elapsedSec*0.001; // 1秒ごとに0.001拡大
+  const elapsedYears = elapsedSec / secondsInYear;
+
+  // 100年で直径10000px → 半径5000px
+  const maxRadius = 5000;
+  const scale = Math.min(elapsedYears/100, 1) * maxRadius*2; // PlaneGeometryのサイズに合わせて拡大
+
   core.scale.set(scale, scale, 1);
 
   renderer.render(scene, camera);
