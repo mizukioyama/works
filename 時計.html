@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <title>幻想的ホログラムリング</title>
   <style>
-    body { margin:0; overflow:hidden; background:#1a1a1a; } /* より深い灰色 */
+    body { margin:0; overflow:hidden; background:#1a1a1a; } /* 幻想的な灰色 */
     canvas { display:block; }
   </style>
 </head>
@@ -21,13 +21,11 @@
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setClearColor(0x1a1a1a); // 幻想的な灰色
+    renderer.setClearColor(0x1a1a1a); // 背景：幻想的な灰色
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.3;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     document.body.appendChild(renderer.domElement);
-
-    const startTime = Date.now();
 
     // === ホログラム風テクスチャ生成 ===
     function createHoloRingTexture(size = 512) {
@@ -95,14 +93,12 @@
       bgGroup.add(ring);
     }
 
-    // === アニメーション ===
+    // === アニメーション（回転のみ） ===
     function animate() {
       requestAnimationFrame(animate);
-      const t = (Date.now() - startTime) / 1000;
 
       bgGroup.children.forEach((ring, i) => {
-        ring.rotation.z += 0.0015 * (i % 2 === 0 ? 1 : -1);
-        ring.material.opacity = 0.35 + 0.2 * Math.sin(t * 1.5 + i);
+        ring.rotation.z += 0.0015 * (i % 2 === 0 ? 1 : -1); // 交互に回転
       });
 
       renderer.render(scene, camera);
