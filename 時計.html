@@ -106,10 +106,12 @@ function createFlareRing(radius) {
 }
 
 // === 時計リング ===
-const secRing = createFlareRing(3.5);
-const minRing = createFlareRing(4.2);
-const hourRing = createFlareRing(5.0);
+// 中央の光球 (直径 2.5) に合わせる
+const secRing = createFlareRing(1.4);  // 秒 → 中心にほぼ重なる
+const minRing = createFlareRing(1.7);  // 分 → 少し外側
+const hourRing = createFlareRing(2.0); // 時 → さらに外側
 scene.add(secRing, minRing, hourRing);
+
 
 // === 時間管理 ===
 const startDate = new Date();
