@@ -2,103 +2,63 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>幻想的ホログラムリング</title>
+  <title>幻想的な光球</title>
   <style>
-    body { margin:0; overflow:hidden; background:#2a2a32; } /* 淡い灰色背景 */
+    body { margin:0; overflow:hidden; background:black; }
     canvas { display:block; }
   </style>
 </head>
 <body>
-  <!-- Three.js -->
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-
   <script>
     // === 基本セットアップ ===
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 0, 6);
+    camera.position.z = 5;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setClearColor(0x2a2a32); // 幻想的な灰色
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
     document.body.appendChild(renderer.domElement);
 
-    // === 淡いホログラム風テクスチャ ===
-    function createSoftRingTexture(size = 512) {
+    // === 光球テクスチャ生成 ===
+    function createGlowTexture(size = 1024) {
       const canvas = document.createElement("canvas");
       canvas.width = canvas.height = size;
       const ctx = canvas.getContext("2d");
-
       const r = size / 2;
 
-      // 放射状の柔らかいグラデーション
-      const radial = ctx.createRadialGradient(r, r, r*0.2, r, r, r);
-      radial.addColorStop(0.0, "rgba(255,255,255,0.6)");
-      radial.addColorStop(0.4, "rgba(180,220,255,0.3)"); // 淡い青
-      radial.addColorStop(0.7, "rgba(200,180,255,0.2)"); // 淡い紫
-      radial.addColorStop(1.0, "rgba(0,0,0,0.0)");
+      // 外側の虹色ぼかし
+      const gradient = ctx.createRadialGradient(r, r, r*0.1, r, r, r*0.95);
+      gradient.addColorStop(0.0, "rgba(255,255,255,1.0)");
+      gradient.addColorStop(0.2, "rgba(255,255,200,0.8)"); // 黄
+      gradient.addColorStop(0.4, "rgba(200,255,255,0.6)"); // 水色
+      gradient.addColorStop(0.6, "rgba(200,200,255,0.4)"); // 青
+      gradient.addColorStop(0.8, "rgba(255,200,255,0.3)"); // 紫
+      gradient.addColorStop(1.0, "rgba(0,0,0,0)");         // フェードアウト
 
-      // コニック（環状グラデーション、淡い色）
-      const conic = ctx.createConicGradient(0, r, r);
-      conic.addColorStop(0.0, "rgba(180,240,255,0.3)");
-      conic.addColorStop(0.25, "rgba(220,180,255,0.25)");
-      conic.addColorStop(0.5, "rgba(150,200,255,0.3)");
-      conic.addColorStop(0.75, "rgba(200,180,255,0.25)");
-      conic.addColorStop(1.0, "rgba(180,240,255,0.3)");
-
-      // conic 塗り
-      ctx.fillStyle = conic;
-      ctx.beginPath();
-      ctx.arc(r, r, r, 0, Math.PI * 2);
-      ctx.fill();
-
-      // radial を重ねる（ふんわり）
-      ctx.globalCompositeOperation = "lighter";
-      ctx.fillStyle = radial;
-      ctx.beginPath();
-      ctx.arc(r, r, r, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
 
       const tex = new THREE.CanvasTexture(canvas);
-      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
       tex.needsUpdate = true;
       return tex;
     }
 
-    // === リング作成 ===
-    function createSoftRing(radius) {
-      const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
-      const mat = new THREE.MeshBasicMaterial({
-        map: createSoftRingTexture(),
-        transparent: true,
-        opacity: 0.35, // 淡く表示
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide,
-        depthWrite: false
-      });
-      return new THREE.Mesh(geo, mat);
-    }
+    // === 光球メッシュ ===
+    const geo = new THREE.PlaneGeometry(4, 4);
+    const mat = new THREE.MeshBasicMaterial({
+      map: createGlowTexture(),
+      transparent: true,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending
+    });
+    const glow = new THREE.Mesh(geo, mat);
+    scene.add(glow);
 
-    // === 背景リング群 ===
-    const bgGroup = new THREE.Group();
-    scene.add(bgGroup);
-
-    for (let i = 0; i < 10; i++) {
-      const ring = createSoftRing(2 + i * 0.8);
-      ring.position.z = -i * 0.5;
-      bgGroup.add(ring);
-    }
-
-    // === アニメーション（回転のみ） ===
+    // === アニメーション ===
     function animate() {
       requestAnimationFrame(animate);
-      bgGroup.children.forEach((ring, i) => {
-        ring.rotation.z += 0.001 * (i % 2 === 0 ? 1 : -1); // ゆっくり交互に回転
-      });
+      glow.rotation.z += 0.001; // ゆっくり回転
       renderer.render(scene, camera);
     }
     animate();
