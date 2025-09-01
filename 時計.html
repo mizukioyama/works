@@ -77,21 +77,23 @@ function createCore() {
 const core = createCore();
 scene.add(core);
 
-// === 単色リング ===
+// === 単色リング作成（濃さ強調版） ===
 function createSolidRing(radius, color) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 512;
   const ctx = canvas.getContext("2d");
   const r = canvas.width / 2;
 
+  // 単色塗り
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(r, r, r, 0, Math.PI * 2);
   ctx.fill();
 
-  const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
+  // マスク（淡すぎないように調整）
+  const mask = ctx.createRadialGradient(r, r, r*0.5, r, r, r*0.95);
   mask.addColorStop(0.0, "rgba(0,0,0,0)");
-  mask.addColorStop(0.5, "rgba(0,0,0,0.7)");
+  mask.addColorStop(0.7, "rgba(0,0,0,0.4)"); // ← 0.7 で薄めに
   mask.addColorStop(1.0, "rgba(0,0,0,0)");
   ctx.globalCompositeOperation = "destination-in";
   ctx.fillStyle = mask;
@@ -102,14 +104,12 @@ function createSolidRing(radius, color) {
   const mat = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.9, // ← 濃く
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: true
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.z = -1; // 背景側に配置
-  return mesh;
+  return new THREE.Mesh(geo, mat);
 }
 
 // === 動的リング（時計用） ===
@@ -164,7 +164,13 @@ const hourRing = createDynamicRing(2.0);
 scene.add(secRing.mesh, minRing.mesh, hourRing.mesh);
 
 // === カラーパレット ===
-const palette = Array.from({length:100}, (_,i)=>`hsla(${(i*360/100)},100%,60%,0.25)`);
+//const palette = Array.from({length:100}, (_,i)=>`hsla(${(i*360/100)},100%,60%,0.25)`);
+
+// === カラーパレット（100色HSLA / 濃く） ===
+const palette = Array.from(
+  {length:100},
+  (_,i)=>`hsla(${(i*360/100)},100%,60%,0.6)` // ← 濃く
+);
 
 // === 管理 ===
 const startDate = new Date();
