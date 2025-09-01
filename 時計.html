@@ -102,12 +102,14 @@ function createSolidRing(radius, color) {
   const mat = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
-    opacity: 0.6,
+    opacity: 0.5,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: true
   });
-  return new THREE.Mesh(geo, mat);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.z = -0.1; // 背景に置く
+  return mesh;
 }
 
 // === 動的カラーリング（時計リング用） ===
@@ -168,7 +170,7 @@ const palette = Array.from({length:100}, (_,i)=>`hsla(${(i*360/100)},100%,60%,0.
 // === 時間管理 ===
 const startDate = new Date();
 const extraRings = [];
-const yearMs = 10000; // 10秒を1年換算
+const yearMs = 10000; // 10秒を1年換算（テスト）
 
 // === アニメーション ===
 function animate() {
@@ -176,11 +178,11 @@ function animate() {
   const now = new Date();
   const elapsedMs = now - startDate;
 
-  // === 中央拡大（緩やかに） ===
-  const scale = 1 + (elapsedMs / (yearMs * 20)); 
+  // === 中央拡大 ===
+  const scale = 1 + (elapsedMs / (yearMs * 20));
   core.scale.set(scale, scale, 1);
 
-  // === 時計の回転 ===
+  // === 時計リングの回転 ===
   const sec = now.getSeconds() + now.getMilliseconds()/1000;
   const min = now.getMinutes() + sec/60;
   const hour = (now.getHours()%12) + min/60;
@@ -189,17 +191,17 @@ function animate() {
   minRing.mesh.rotation.z = -(min/60)*Math.PI*2;
   hourRing.mesh.rotation.z = -(hour/12)*Math.PI*2;
 
-  // === 時計リング色相変化 ===
+  // === 時計リングの色変化 ===
   const hueShift = (elapsedMs/100) % 360;
   secRing.draw(hueShift);
   minRing.draw(hueShift*0.5);
   hourRing.draw(hueShift*0.2);
 
-  // === リング追加（10秒ごと） ===
+  // === 背景リング追加 ===
   const ringsNeeded = Math.floor(elapsedMs / yearMs);
   while (extraRings.length < ringsNeeded) {
     const idx = extraRings.length % palette.length;
-    const radius = 2.5 + extraRings.length*0.3;
+    const radius = 2.5 + extraRings.length*0.5; // 少しずつ外側へ
     const ring = createSolidRing(radius, palette[idx]);
     scene.add(ring);
     extraRings.push(ring);
