@@ -90,13 +90,11 @@ function createSolidRing(radius, color) {
   const ctx = canvas.getContext("2d");
   const r = canvas.width / 2;
 
-  // 単色塗り
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(r, r, r, 0, Math.PI * 2);
   ctx.fill();
 
-  // マスク（淡くする）
   const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
   mask.addColorStop(0.0, "rgba(0,0,0,0)");
   mask.addColorStop(0.5, "rgba(0,0,0,0.7)");
@@ -118,7 +116,7 @@ function createSolidRing(radius, color) {
   return new THREE.Mesh(geo, mat);
 }
 
-// === 時計リング（動的な色変化あり） ===
+// === 時計リング（動的に色変化） ===
 function createDynamicRing(radius) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 1024;
@@ -175,17 +173,20 @@ const palette = Array.from({length:100}, (_,i)=>`hsla(${(i*360/100)},100%,60%,0.
 
 // === 時間管理 ===
 const startDate = new Date();
-const extraRings = []; // 追加リングを管理
+const extraRings = [];
+
+// 1年 = 10秒（テスト用）
+const yearMs = 10000;
 
 // === アニメーション ===
 function animate() {
   requestAnimationFrame(animate);
   const now = new Date();
   const elapsedMs = now - startDate;
-  const yearsPassed = Math.floor(elapsedMs / (1000*60*60*24*365));
+  const yearsPassed = Math.floor(elapsedMs / yearMs);
 
-  // === 中央コアの拡大 ===
-  const scale = 1 + (elapsedMs / (1000*60*60*24*365*100)) * 9;
+  // === 中央コア拡大 ===
+  const scale = 1 + (elapsedMs / (yearMs * 100)) * 9;
   core.scale.set(scale, scale, 1);
 
   secRing.mesh.scale.set(scale*1.1, scale*1.1, 1);
@@ -201,13 +202,13 @@ function animate() {
   minRing.mesh.rotation.z = -(min/60)*Math.PI*2;
   hourRing.mesh.rotation.z = -(hour/12)*Math.PI*2;
 
-  // === 時計リング色相変化 ===
+  // === 時計リングの色相変化 ===
   const hueShift = (elapsedMs/100) % 360;
   secRing.draw(hueShift);
   minRing.draw(hueShift*0.5);
   hourRing.draw(hueShift*0.2);
 
-  // === 年ごとにリング追加 ===
+  // === リング追加（10秒ごと） ===
   while (extraRings.length < yearsPassed) {
     const idx = extraRings.length % palette.length;
     const radius = 2.5 + extraRings.length*0.3;
