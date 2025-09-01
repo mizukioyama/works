@@ -49,7 +49,7 @@ function createGlowTexture(size = 1024) {
   return new THREE.CanvasTexture(canvas);
 }
 
-// === 光球本体 ===
+// === 光球本体（中心＋オーラ） ===
 function createCore() {
   const group = new THREE.Group();
 
@@ -65,12 +65,12 @@ function createCore() {
   const core = new THREE.Mesh(coreGeo, coreMat);
   group.add(core);
 
-  // 外側の淡いオーラ
-  const auraGeo = new THREE.PlaneGeometry(4.5, 4.5);
+  // 外側の淡いオーラ（大きめ）
+  const auraGeo = new THREE.PlaneGeometry(6.5, 6.5);
   const auraMat = new THREE.MeshBasicMaterial({
     map: createGlowTexture(),
     transparent: true,
-    opacity: 0.4,
+    opacity: 0.3,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
@@ -83,7 +83,7 @@ function createCore() {
 const core = createCore();
 scene.add(core);
 
-// === リングテクスチャ（境界を淡く） ===
+// === リングテクスチャ（境界をさらに淡く） ===
 function createRingTexture(size = 1024) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
@@ -92,22 +92,22 @@ function createRingTexture(size = 1024) {
 
   // 虹色グラデーション
   const gradient = ctx.createConicGradient(0, r, r);
-  gradient.addColorStop(0.0, "rgba(255,0,0,0.18)");
-  gradient.addColorStop(0.2, "rgba(255,255,0,0.18)");
-  gradient.addColorStop(0.4, "rgba(0,255,255,0.18)");
-  gradient.addColorStop(0.6, "rgba(0,128,255,0.18)");
-  gradient.addColorStop(0.8, "rgba(255,0,255,0.18)");
-  gradient.addColorStop(1.0, "rgba(255,0,0,0.18)");
+  gradient.addColorStop(0.0, "rgba(255,0,0,0.15)");
+  gradient.addColorStop(0.2, "rgba(255,255,0,0.15)");
+  gradient.addColorStop(0.4, "rgba(0,255,255,0.15)");
+  gradient.addColorStop(0.6, "rgba(0,128,255,0.15)");
+  gradient.addColorStop(0.8, "rgba(255,0,255,0.15)");
+  gradient.addColorStop(1.0, "rgba(255,0,0,0.15)");
 
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.arc(r, r, r, 0, Math.PI * 2);
   ctx.fill();
 
-  // 内側を抜いてリング化（境界を淡く）
-  const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
+  // 内側を抜いてリング化（グラデーションを広くして淡く）
+  const mask = ctx.createRadialGradient(r, r, r*0.3, r, r, r*1.0);
   mask.addColorStop(0.0, "rgba(0,0,0,0)");
-  mask.addColorStop(0.5, "rgba(0,0,0,0.7)");
+  mask.addColorStop(0.6, "rgba(0,0,0,0.5)");
   mask.addColorStop(1.0, "rgba(0,0,0,0)");
   ctx.globalCompositeOperation = "destination-in";
   ctx.fillStyle = mask;
@@ -116,12 +116,13 @@ function createRingTexture(size = 1024) {
   return new THREE.CanvasTexture(canvas);
 }
 
+// === リング作成 ===
 function createFlareRing(radius) {
   const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
   const mat = new THREE.MeshBasicMaterial({
     map: createRingTexture(),
     transparent: true,
-    opacity: 0.5, // さらに淡く
+    opacity: 0.35, // より淡く
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: true
