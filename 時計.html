@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <title>幻想的な時計リング</title>
   <style>
-    body { margin:0; overflow:hidden; }
+    body { margin:0; overflow:hidden; background:#eee; }
     canvas { display:block; }
   </style>
   <script type="importmap">
@@ -49,10 +49,9 @@ function createGlowTexture(size = 1024) {
   return new THREE.CanvasTexture(canvas);
 }
 
-// === 光球本体 ===
+// === 中央の光球 ===
 function createCore() {
   const group = new THREE.Group();
-
   const coreGeo = new THREE.PlaneGeometry(2.5, 2.5);
   const coreMat = new THREE.MeshBasicMaterial({
     map: createGlowTexture(),
@@ -61,159 +60,70 @@ function createCore() {
     side: THREE.DoubleSide,
     depthWrite: false
   });
-  const core = new THREE.Mesh(coreGeo, coreMat);
-  group.add(core);
-
-  const auraGeo = new THREE.PlaneGeometry(4.5, 4.5);
-  const auraMat = new THREE.MeshBasicMaterial({
-    map: createGlowTexture(),
-    transparent: true,
-    opacity: 0.5,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: false
-  });
-  const aura = new THREE.Mesh(auraGeo, auraMat);
-  group.add(aura);
-
+  group.add(new THREE.Mesh(coreGeo, coreMat));
   return group;
 }
 const core = createCore();
 scene.add(core);
 
-// === 単色リング作成（濃さ強化版） ===
-function createSolidRing(radius, color) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  const r = canvas.width / 2;
-
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(r, r, r, 0, Math.PI * 2);
-  ctx.fill();
-
-  // マスク → 透明度を弱め、より見えるように調整
-  const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
-  mask.addColorStop(0.0, "rgba(0,0,0,0)");
-  mask.addColorStop(0.5, "rgba(0,0,0,0.5)");
-  mask.addColorStop(1.0, "rgba(0,0,0,0)");
-  ctx.globalCompositeOperation = "destination-in";
-  ctx.fillStyle = mask;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  const geo = new THREE.PlaneGeometry(radius*2, radius*2);
+// === 時計リング（消えない3色リング） ===
+function createClockRing(radius, color) {
+  const geo = new THREE.RingGeometry(radius*0.95, radius, 128);
   const mat = new THREE.MeshBasicMaterial({
-    map: texture,
+    color: color,
     transparent: true,
-    opacity: 0.9, // さらに濃く
+    opacity: 0.8,
     blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: true
+    side: THREE.DoubleSide
+  });
+  return new THREE.Mesh(geo, mat);
+}
+const secRing = createClockRing(1.4, 0xff6666); // 赤系
+const minRing = createClockRing(1.7, 0x66ff66); // 緑系
+const hourRing = createClockRing(2.0, 0x6666ff); // 青系
+scene.add(secRing, minRing, hourRing);
+
+// === 背景リング（増えていくリング） ===
+function createBackgroundRing(radius, color) {
+  const geo = new THREE.RingGeometry(radius*0.95, radius, 128);
+  const mat = new THREE.MeshBasicMaterial({
+    color: color,
+    transparent: true,
+    opacity: 0.3,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide
   });
   return new THREE.Mesh(geo, mat);
 }
 
-// === 時計リング（動的な色変化あり） ===
-function createDynamicRing(radius) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 1024;
-  const ctx = canvas.getContext("2d");
-  const texture = new THREE.CanvasTexture(canvas);
-
-  function draw(hueShift) {
-    const r = canvas.width/2;
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-
-    // --- 濃いめのグラデーション ---
-    const grad = ctx.createConicGradient(0, r, r);
-    for (let i = 0; i <= 1; i += 0.2) {
-      const hue = (i * 360 + hueShift) % 360;
-      grad.addColorStop(i, `hsla(${hue}, 100%, 60%, 0.6)`); // ← 不透明度アップ
-    }
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(r, r, r, 0, Math.PI*2);
-    ctx.fill();
-
-    // --- マスクを「外側だけ残す」ように調整 ---
-    const mask = ctx.createRadialGradient(r, r, r*0.65, r, r, r*0.95);
-    mask.addColorStop(0.0, "rgba(0,0,0,0)");
-    mask.addColorStop(0.7, "rgba(0,0,0,1)");
-    mask.addColorStop(1.0, "rgba(0,0,0,0)");
-    ctx.globalCompositeOperation = "destination-in";
-    ctx.fillStyle = mask;
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.globalCompositeOperation = "source-over";
-
-    texture.needsUpdate = true;
-  }
-
-  const geo = new THREE.PlaneGeometry(radius*2, radius*2);
-  const mat = new THREE.MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    opacity: 0.9, // ← リングを濃く表示
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: true
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  return { mesh, draw };
-}
-
-
-// === 時計リング3つ ===
-const secRing = createDynamicRing(1.4);
-const minRing = createDynamicRing(1.7);
-const hourRing = createDynamicRing(2.0);
-scene.add(secRing.mesh, minRing.mesh, hourRing.mesh);
-
 // === カラーパレット（100色HSLA） ===
-const palette = Array.from({length:100}, (_,i)=>`hsla(${(i*360/100)},100%,60%,0.8)`);
+const palette = Array.from({length:100}, (_,i)=>`hsl(${(i*360/100)},100%,70%)`);
+const extraRings = [];
 
 // === 時間管理 ===
-const startDate = new Date();
-const extraRings = [];
+const startTime = Date.now();
 
 // === アニメーション ===
 function animate() {
   requestAnimationFrame(animate);
   const now = new Date();
-  const elapsedMs = now - startDate;
+  const elapsed = Date.now() - startTime;
 
-  // === 10秒ごとに背景リング追加（テスト用） ===
-  const ringsPassed = Math.floor(elapsedMs / 10000);
-
-  // === 拡大スケールは全体一括で管理 ===
-  const scale = 1 + (elapsedMs / (1000*60*60*24*365*100)) * 9;
-  core.scale.set(scale, scale, 1);
-
-  secRing.mesh.scale.set(scale, scale, 1);
-  minRing.mesh.scale.set(scale, scale, 1);
-  hourRing.mesh.scale.set(scale, scale, 1);
-
-  // === 時計回転 ===
+  // 時計の回転
   const sec = now.getSeconds() + now.getMilliseconds()/1000;
   const min = now.getMinutes() + sec/60;
   const hour = (now.getHours()%12) + min/60;
 
-  secRing.mesh.rotation.z = -(sec/60)*Math.PI*2;
-  minRing.mesh.rotation.z = -(min/60)*Math.PI*2;
-  hourRing.mesh.rotation.z = -(hour/12)*Math.PI*2;
+  secRing.rotation.z = -(sec/60)*Math.PI*2;
+  minRing.rotation.z = -(min/60)*Math.PI*2;
+  hourRing.rotation.z = -(hour/12)*Math.PI*2;
 
-  // === 時計リング色相変化 ===
-  const hueShift = (elapsedMs/100) % 360;
-  secRing.draw(hueShift);
-  minRing.draw(hueShift*0.5);
-  hourRing.draw(hueShift*0.2);
-
-  // === 背景リング追加 ===
-  while (extraRings.length < ringsPassed) {
+  // 背景リングの追加（テストでは10秒ごと）
+  const ringsShouldExist = 3 + Math.floor(elapsed/10000); // 初期3本 + 経過で追加
+  while (extraRings.length < ringsShouldExist - 3) {
     const idx = extraRings.length % palette.length;
     const radius = 2.5 + extraRings.length*0.3;
-    const ring = createSolidRing(radius, palette[idx]);
+    const ring = createBackgroundRing(radius, palette[idx]);
     scene.add(ring);
     extraRings.push(ring);
   }
