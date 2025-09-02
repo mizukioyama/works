@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <title>幻想的な時計リング（テスト:10秒で増加）</title>
+  <meta charset="utf-8" />
+  <title>幻想的な時計リング（背景固定・フェード増加）</title>
   <style>
-    body { margin:0; overflow:hidden; }
+    body { margin:0; overflow:hidden; background:#eeeeee; }
     canvas { display:block; }
   </style>
   <script type="importmap">
@@ -19,212 +19,228 @@
 <script type="module">
 import * as THREE from "three";
 
-// === 基本セットアップ ===
+/* ---------------- 基本 ---------------- */
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 20000);
 camera.position.z = 10;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setClearColor(0xeeeeee, 1); // 白寄りの灰色
+renderer.setClearColor(0xeeeeee, 1);
 document.body.appendChild(renderer.domElement);
 
-// === 光球テクスチャ ===
-function createGlowTexture(size = 1024) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  const r = size / 2;
-
-  const gradient = ctx.createRadialGradient(r, r, r*0.05, r, r, r);
-  gradient.addColorStop(0.0, "rgba(255,255,255,1.0)");
-  gradient.addColorStop(0.2, "rgba(220,240,255,0.7)");
-  gradient.addColorStop(0.5, "rgba(180,200,255,0.35)");
-  gradient.addColorStop(0.8, "rgba(150,180,255,0.15)");
-  gradient.addColorStop(1.0, "rgba(0,0,0,0)");
-
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, size, size);
-
-  return new THREE.CanvasTexture(canvas);
+/* ---------- ユーティリティ: HSL->RGB ---------- */
+function hslToRgb(h, s, l){
+  const c = (1 - Math.abs(2*l - 1)) * s;
+  const hp = h / 60;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  let [r1,g1,b1] = [0,0,0];
+  if (0 <= hp && hp < 1) [r1,g1,b1] = [c,x,0];
+  else if (1 <= hp && hp < 2) [r1,g1,b1] = [x,c,0];
+  else if (2 <= hp && hp < 3) [r1,g1,b1] = [0,c,x];
+  else if (3 <= hp && hp < 4) [r1,g1,b1] = [0,x,c];
+  else if (4 <= hp && hp < 5) [r1,g1,b1] = [x,0,c];
+  else [r1,g1,b1] = [c,0,x];
+  const m = l - c/2;
+  return [
+    Math.round((r1 + m) * 255),
+    Math.round((g1 + m) * 255),
+    Math.round((b1 + m) * 255)
+  ];
 }
 
-// === 光球本体 ===
-function createCore() {
-  const group = new THREE.Group();
+/* ---------- 中央コア（光球＋オーラ） ---------- */
+function createGlowTexture(size = 1024){
+  const cvs = document.createElement('canvas');
+  cvs.width = cvs.height = size;
+  const ctx = cvs.getContext('2d');
+  const r = size/2;
+  const g = ctx.createRadialGradient(r,r,r*0.02, r,r,r);
+  g.addColorStop(0.0, "rgba(255,255,255,1)");
+  g.addColorStop(0.22, "rgba(255,245,235,0.9)");
+  g.addColorStop(0.45, "rgba(210,230,255,0.5)");
+  g.addColorStop(1.0, "rgba(0,0,0,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,size,size);
+  return new THREE.CanvasTexture(cvs);
+}
 
-  // 中心の強い光
-  const coreGeo = new THREE.PlaneGeometry(2.5, 2.5);
+const coreGroup = new THREE.Group();
+{
+  const coreGeo = new THREE.PlaneGeometry(2.5,2.5);
   const coreMat = new THREE.MeshBasicMaterial({
-    map: createGlowTexture(),
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: false
+    map: createGlowTexture(), transparent:true, blending:THREE.AdditiveBlending,
+    side:THREE.DoubleSide, depthWrite:false
   });
-  const core = new THREE.Mesh(coreGeo, coreMat);
-  group.add(core);
+  const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+  coreGroup.add(coreMesh);
 
-  // 外側の淡いオーラ
-  const auraGeo = new THREE.PlaneGeometry(4.5, 4.5);
+  const auraGeo = new THREE.PlaneGeometry(4.5,4.5);
   const auraMat = new THREE.MeshBasicMaterial({
-    map: createGlowTexture(),
-    transparent: true,
-    opacity: 0.4,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: false
+    map: createGlowTexture(), transparent:true, opacity:0.36, blending:THREE.AdditiveBlending,
+    side:THREE.DoubleSide, depthWrite:false
   });
-  const aura = new THREE.Mesh(auraGeo, auraMat);
-  group.add(aura);
-
-  return group;
+  const auraMesh = new THREE.Mesh(auraGeo, auraMat);
+  coreGroup.add(auraMesh);
 }
-const core = createCore();
-scene.add(core);
+scene.add(coreGroup);
 
-// === 単色リング（背景用） ===
-function createSolidRing(radius, color) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  const r = canvas.width / 2;
-
-  ctx.fillStyle = color;
+/* ---------- ふわっとしたリングテクスチャ（RGB配列） ---------- */
+function createRingTextureFromRGB(rgb, size=1024){
+  const [r,g,b] = rgb;
+  const cvs = document.createElement('canvas');
+  cvs.width = cvs.height = size;
+  const ctx = cvs.getContext('2d');
+  const R = size/2;
+  // 内側は透明、外側に向かって淡い色のリングを作る
+  const grad = ctx.createRadialGradient(R,R,R*0.55, R,R,R*0.96);
+  grad.addColorStop(0.0, "rgba(0,0,0,0)");
+  grad.addColorStop(0.30, `rgba(${r},${g},${b},0.55)`);
+  grad.addColorStop(0.60, `rgba(${r},${g},${b},0.28)`);
+  grad.addColorStop(1.0, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.arc(r, r, r, 0, Math.PI * 2);
+  ctx.arc(R,R,R,0,Math.PI*2);
   ctx.fill();
-
-  const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
-  mask.addColorStop(0.0, "rgba(0,0,0,0)");
-  mask.addColorStop(0.5, "rgba(0,0,0,0.7)");
-  mask.addColorStop(1.0, "rgba(0,0,0,0)");
-  ctx.globalCompositeOperation = "destination-in";
-  ctx.fillStyle = mask;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  const geo = new THREE.PlaneGeometry(radius*2, radius*2);
-  const mat = new THREE.MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    opacity: 0.6,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: true
-  });
-  return new THREE.Mesh(geo, mat);
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.needsUpdate = true;
+  return tex;
 }
 
-// === 時計リング（動的色変化） ===
-function createDynamicRing(radius) {
-  const canvas = document.createElement("canvas");
+/* ---------- 動的時計リング（秒・分・時） ---------- */
+function createDynamicRing(radius, zpos){
+  const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 1024;
-  const ctx = canvas.getContext("2d");
-  const texture = new THREE.CanvasTexture(canvas);
+  const ctx = canvas.getContext('2d');
+  const tex = new THREE.CanvasTexture(canvas);
 
-  function draw(hueShift) {
+  function draw(hueShift){
     const r = canvas.width/2;
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
+    // 円周方向の淡い色帯（conic）
     const grad = ctx.createConicGradient(0, r, r);
-    for (let i = 0; i <= 1; i += 0.2) {
-      const hue = (i * 360 + hueShift) % 360;
-      grad.addColorStop(i, `hsla(${hue}, 100%, 60%, 0.25)`);
+    for (let i=0;i<=1;i+=0.2){
+      const hue = (i*360 + hueShift) % 360;
+      grad.addColorStop(i, `hsla(${hue}, 80%, 65%, 0.35)`);
     }
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.arc(r, r, r, 0, Math.PI*2);
+    ctx.arc(r,r,r,0,Math.PI*2);
     ctx.fill();
 
-    const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
+    // 内側を抜いて輪状にする（ふわっと）
+    const mask = ctx.createRadialGradient(r,r,r*0.55, r,r,r*0.95);
     mask.addColorStop(0.0, "rgba(0,0,0,0)");
-    mask.addColorStop(0.5, "rgba(0,0,0,0.7)");
+    mask.addColorStop(0.6, "rgba(0,0,0,0.9)");
     mask.addColorStop(1.0, "rgba(0,0,0,0)");
     ctx.globalCompositeOperation = "destination-in";
     ctx.fillStyle = mask;
     ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.globalCompositeOperation = "source-over";
 
-    texture.needsUpdate = true;
+    tex.needsUpdate = true;
   }
 
   const geo = new THREE.PlaneGeometry(radius*2, radius*2);
   const mat = new THREE.MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    opacity: 0.5,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: true
+    map: tex, transparent:true, opacity:0.95,
+    blending: THREE.NormalBlending, side:THREE.DoubleSide, depthWrite:false
   });
   const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.z = zpos;
   return { mesh, draw };
 }
 
-// === 時計リング3つ ===
-const secRing = createDynamicRing(1.4);
-const minRing = createDynamicRing(1.7);
-const hourRing = createDynamicRing(2.0);
+// create three dynamic visible rings (seconds/minute/hour) in front
+const secRing = createDynamicRing(1.4, 0.06);
+const minRing = createDynamicRing(1.7, 0.08);
+const hourRing = createDynamicRing(2.0, 0.10);
 scene.add(secRing.mesh, minRing.mesh, hourRing.mesh);
 
-// === パレット（100色HSLA） ===
-const palette = Array.from({length:100}, (_,i)=>`hsla(${(i*360/100)},100%,60%,0.25)`);
-
-// === 時間管理 ===
-const startTime = Date.now();
-const extraRings = [];
-
-// === アニメーション ===
-function animate() {
-  requestAnimationFrame(animate);
-  const now = new Date();
-  const elapsedMs = Date.now() - startTime;
-
-  // 中央コアのわずかな拡大
-  const scale = 1 + (elapsedMs/1000000); // テスト縮尺
-  core.scale.set(scale, scale, 1);
-
-  secRing.mesh.scale.set(scale*1.1, scale*1.1, 1);
-  minRing.mesh.scale.set(scale*1.2, scale*1.2, 1);
-  hourRing.mesh.scale.set(scale*1.3, scale*1.3, 1);
-
-  // 時計回転
-  const sec = now.getSeconds() + now.getMilliseconds()/1000;
-  const min = now.getMinutes() + sec/60;
-  const hour = (now.getHours()%12) + min/60;
-  secRing.mesh.rotation.z = -(sec/60)*Math.PI*2;
-  minRing.mesh.rotation.z = -(min/60)*Math.PI*2;
-  hourRing.mesh.rotation.z = -(hour/12)*Math.PI*2;
-
-  // 時計リングの色相変化
-  const hueShift = (elapsedMs/100) % 360;
-  secRing.draw(hueShift);
-  minRing.draw(hueShift*0.5);
-  hourRing.draw(hueShift*0.2);
-
-  // === 背景用グループ ===
+/* ---------- 背景グループ（必ず奥） ---------- */
 const backgroundGroup = new THREE.Group();
-backgroundGroup.position.z = -1; // コアより奥に置く
+backgroundGroup.position.z = -6; // 奥に置く（コア・時計リングは z ~ 0）
 scene.add(backgroundGroup);
 
-// === リング追加処理 ===
-while (extraRings.length < ringsShouldExist) {
-  const idx = extraRings.length % palette.length;
-  const radius = 2.5 + extraRings.length*0.3;
-  const ring = createSolidRing(radius, palette[idx]);
-  ring.renderOrder = -1; // 背景として描画順序を下げる
-  backgroundGroup.add(ring); // ← sceneではなくbackgroundGroupに追加
-  extraRings.push(ring);
+/* ---------- 背景リング（追加・フェード管理） ---------- */
+function createBackgroundRingMesh(radius, rgb, targetOpacity=0.34, fadeDur=1800){
+  const tex = createRingTextureFromRGB(rgb, 1024);
+  const geo = new THREE.PlaneGeometry(radius*2, radius*2);
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex, transparent:true, opacity:0.0,
+    blending: THREE.NormalBlending, side:THREE.DoubleSide, depthWrite:false
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData = {
+    targetOpacity,
+    createdAt: Date.now(),
+    fadeDuration: fadeDur
+  };
+  return mesh;
 }
 
+/* ---------- パステル100色（淡めに見える設定） ---------- */
+const pastel100 = Array.from({length:100}, (_,i)=>{
+  const h = (i * 3.6) % 360;
+  const s = 0.45;
+  const l = 0.72;
+  return hslToRgb(h, s, l);
+});
+
+/* ---------- 管理変数 ---------- */
+const extraRings = []; // store meshes added to backgroundGroup
+const startTime = Date.now();
+const intervalMs = 10000; // テスト: 10秒で1本追加
+const ringSpacing = 0.38; // 外側への間隔
+
+/* ---------- アニメーションループ ---------- */
+function animate(){
+  requestAnimationFrame(animate);
+
+  const now = Date.now();
+  const elapsed = now - startTime;
+
+  // 時計（回転・色相）
+  const dt = new Date();
+  const sec = dt.getSeconds() + dt.getMilliseconds()/1000;
+  const min = dt.getMinutes() + sec/60;
+  const hrs = (dt.getHours()%12) + min/60;
+
+  secRing.mesh.rotation.z  = -(sec/60) * Math.PI*2;
+  minRing.mesh.rotation.z  = -(min/60) * Math.PI*2;
+  hourRing.mesh.rotation.z = -(hrs/12) * Math.PI*2;
+
+  // hue shifts slightly different speeds
+  const hueShift = (elapsed / 100) % 360;
+  secRing.draw(hueShift);
+  minRing.draw(hueShift * 0.45);
+  hourRing.draw(hueShift * 0.18);
+
+  // 背景リングが必要数になるまで追加（10秒ごと）
+  const shouldCount = Math.floor(elapsed / intervalMs);
+  while (extraRings.length < shouldCount) {
+    const idx = extraRings.length % pastel100.length;
+    const rgb = pastel100[idx];
+    const radius = 2.5 + extraRings.length * ringSpacing;
+    const mesh = createBackgroundRingMesh(radius, rgb, 0.34, 2000);
+    // add to background group (already at z = -6) -> will appear behind core/rings
+    backgroundGroup.add(mesh);
+    extraRings.push(mesh);
+  }
+
+  // フェード処理（増えたリングを徐々に opacity up）
+  extraRings.forEach(m => {
+    const t = Math.min(1, (now - (m.userData.createdAt || now)) / m.userData.fadeDuration);
+    m.material.opacity = (m.userData.targetOpacity || 0.34) * t;
+  });
 
   renderer.render(scene, camera);
 }
 animate();
 
-// === リサイズ ===
-addEventListener("resize", () => {
+/* ---------- リサイズ ---------- */
+addEventListener('resize', ()=>{
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
