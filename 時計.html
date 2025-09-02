@@ -115,7 +115,7 @@ function createSolidRing(radius, color) {
   return new THREE.Mesh(geo, mat);
 }
 
-// === 時計リング（動的色変化あり） ===
+// === 時計リング（動的な色変化あり） ===
 function createDynamicRing(radius) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 1024;
@@ -126,19 +126,21 @@ function createDynamicRing(radius) {
     const r = canvas.width/2;
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
+    // --- 濃いめのグラデーション ---
     const grad = ctx.createConicGradient(0, r, r);
     for (let i = 0; i <= 1; i += 0.2) {
       const hue = (i * 360 + hueShift) % 360;
-      grad.addColorStop(i, `hsla(${hue}, 100%, 60%, 0.4)`); // 濃さup
+      grad.addColorStop(i, `hsla(${hue}, 100%, 60%, 0.6)`); // ← 不透明度アップ
     }
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(r, r, r, 0, Math.PI*2);
     ctx.fill();
 
-    const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
+    // --- マスクを「外側だけ残す」ように調整 ---
+    const mask = ctx.createRadialGradient(r, r, r*0.65, r, r, r*0.95);
     mask.addColorStop(0.0, "rgba(0,0,0,0)");
-    mask.addColorStop(0.5, "rgba(0,0,0,0.5)");
+    mask.addColorStop(0.7, "rgba(0,0,0,1)");
     mask.addColorStop(1.0, "rgba(0,0,0,0)");
     ctx.globalCompositeOperation = "destination-in";
     ctx.fillStyle = mask;
@@ -152,7 +154,7 @@ function createDynamicRing(radius) {
   const mat = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
-    opacity: 0.7,
+    opacity: 0.9, // ← リングを濃く表示
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: true
@@ -160,6 +162,7 @@ function createDynamicRing(radius) {
   const mesh = new THREE.Mesh(geo, mat);
   return { mesh, draw };
 }
+
 
 // === 時計リング3つ ===
 const secRing = createDynamicRing(1.4);
