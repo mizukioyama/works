@@ -203,15 +203,21 @@ function animate() {
   minRing.draw(hueShift*0.5);
   hourRing.draw(hueShift*0.2);
 
-  // 10秒ごとにリング追加
-  const ringsShouldExist = Math.floor(elapsedMs / 10000);
-  while (extraRings.length < ringsShouldExist) {
-    const idx = extraRings.length % palette.length;
-    const radius = 2.5 + extraRings.length*0.3;
-    const ring = createSolidRing(radius, palette[idx]);
-    scene.add(ring);
-    extraRings.push(ring);
-  }
+  // === 背景用グループ ===
+const backgroundGroup = new THREE.Group();
+backgroundGroup.position.z = -1; // コアより奥に置く
+scene.add(backgroundGroup);
+
+// === リング追加処理 ===
+while (extraRings.length < ringsShouldExist) {
+  const idx = extraRings.length % palette.length;
+  const radius = 2.5 + extraRings.length*0.3;
+  const ring = createSolidRing(radius, palette[idx]);
+  ring.renderOrder = -1; // 背景として描画順序を下げる
+  backgroundGroup.add(ring); // ← sceneではなくbackgroundGroupに追加
+  extraRings.push(ring);
+}
+
 
   renderer.render(scene, camera);
 }
