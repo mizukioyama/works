@@ -193,21 +193,21 @@ function animate(){
   const now = Date.now();
   const elapsed = now - startTime;
 
-// 時計の回転
-secRing.mesh.rotation.z  = -(sec/60) * Math.PI*2;
-minRing.mesh.rotation.z  = -(min/60) * Math.PI*2;
-hourRing.mesh.rotation.z = -(hrs/12) * Math.PI*2;
+  // === ここを追加: 現在の時刻を取得 ===
+  const date = new Date();
+  const sec = date.getSeconds() + date.getMilliseconds()/1000;
+  const min = date.getMinutes() + sec/60;
+  const hrs = date.getHours() % 12 + min/60;
 
-// リングの描画更新
-secRing.draw();
-minRing.draw();
-hourRing.draw();
+  // 時計の回転
+  secRing.mesh.rotation.z  = -(sec/60) * Math.PI*2;
+  minRing.mesh.rotation.z  = -(min/60) * Math.PI*2;
+  hourRing.mesh.rotation.z = -(hrs/12) * Math.PI*2;
 
-  // hue shifts slightly different speeds
-  const hueShift = (elapsed / 100) % 360;
-  secRing.draw(hueShift);
-  minRing.draw(hueShift * 0.45);
-  hourRing.draw(hueShift * 0.18);
+  // リングの描画更新（単色なので hueShift は不要）
+  secRing.draw();
+  minRing.draw();
+  hourRing.draw();
 
   // 背景リングが必要数になるまで追加（10秒ごと）
   const shouldCount = Math.floor(elapsed / intervalMs);
@@ -216,7 +216,6 @@ hourRing.draw();
     const rgb = pastel100[idx];
     const radius = 2.5 + extraRings.length * ringSpacing;
     const mesh = createBackgroundRingMesh(radius, rgb, 0.34, 2000);
-    // add to background group (already at z = -6) -> will appear behind core/rings
     backgroundGroup.add(mesh);
     extraRings.push(mesh);
   }
@@ -229,7 +228,6 @@ hourRing.draw();
 
   renderer.render(scene, camera);
 }
-animate();
 
 /* ---------- リサイズ ---------- */
 addEventListener('resize', ()=>{
