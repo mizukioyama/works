@@ -211,6 +211,54 @@ addEventListener('resize', ()=>{
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
+
+
+/* ---------- 背景リング（追加・フェード管理） ---------- */
+function createBackgroundRingMesh(radius, rgb, targetOpacity=0.20, fadeDur=2500){
+  const tex = createRingTextureFromRGB(rgb, 1024);
+  const geo = new THREE.PlaneGeometry(radius*2, radius*2);
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex,
+    transparent: true,
+    opacity: 0.0, // フェードイン開始
+    blending: THREE.AdditiveBlending,  // 淡い重なりに
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData = {
+    targetOpacity,
+    createdAt: Date.now(),
+    fadeDuration: fadeDur
+  };
+  return mesh;
+}
+
+/* ---------- ふわっとしたリングテクスチャ（RGB配列） ---------- */
+function createRingTextureFromRGB(rgb, size=1024){
+  const [r,g,b] = rgb;
+  const cvs = document.createElement('canvas');
+  cvs.width = cvs.height = size;
+  const ctx = cvs.getContext('2d');
+  const R = size/2;
+
+  // より広がりのある淡いリング
+  const grad = ctx.createRadialGradient(R,R,R*0.45, R,R,R*0.98);
+  grad.addColorStop(0.0, "rgba(0,0,0,0)");
+  grad.addColorStop(0.25, `rgba(${r},${g},${b},0.18)`);
+  grad.addColorStop(0.55, `rgba(${r},${g},${b},0.10)`);
+  grad.addColorStop(1.0, "rgba(0,0,0,0)");
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(R,R,R,0,Math.PI*2);
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 </script>
 </body>
 </html>
