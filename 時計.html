@@ -178,13 +178,20 @@ const extraRings = [];
 const startTime = Date.now();
 const intervalMs = 3000; // テスト: 3秒ごと
 
+function getRandomPastel() {
+  const hue = Math.random() * 360;
+  const sat = 70 + Math.random() * 20; // 70–90%
+  const light = 70 + Math.random() * 20; // 70–90%
+  return `hsla(${hue}, ${sat}%, ${light}%, 0.4)`;
+}
+
 // === アニメーション ===
 function animate() {
   requestAnimationFrame(animate);
   const now = Date.now();
   const elapsed = now - startTime;
 
-  // 時計リング回転
+  // 時計リング回転・色更新
   const dt = new Date();
   const sec = dt.getSeconds() + dt.getMilliseconds()/1000;
   const min = dt.getMinutes() + sec/60;
@@ -202,9 +209,9 @@ function animate() {
   // 新しい背景リングを追加
   const shouldCount = Math.floor(elapsed / intervalMs);
   while (extraRings.length < shouldCount) {
-    const idx = extraRings.length % palette.length;
     const radius = 2.5 + extraRings.length*0.4;
-    const ring = createSolidRing(radius, palette[idx], 0.5, 2000);
+    const color = getRandomPastel(); // ← ランダム淡色
+    const ring = createSolidRing(radius, color, 0.5, 2000);
     backgroundGroup.add(ring);
     extraRings.push(ring);
   }
@@ -217,7 +224,6 @@ function animate() {
 
   renderer.render(scene, camera);
 }
-animate();
 
 // === リサイズ対応 ===
 window.addEventListener("resize", () => {
