@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>幻想的な時計リング（背景リング追加）</title>
+  <title>幻想的な時計リング（ゆらぎ回転付き）</title>
   <style>
     body { margin:0; overflow:hidden; background:#eeeeee; }
     canvas { display:block; }
@@ -161,9 +161,17 @@ function animate(){
   const sec=dt.getSeconds()+dt.getMilliseconds()/1000;
   const min=dt.getMinutes()+sec/60;
   const hrs=(dt.getHours()%12)+min/60;
-  secRing.mesh.rotation.z=-(sec/60)*Math.PI*2;
-  minRing.mesh.rotation.z=-(min/60)*Math.PI*2;
-  hourRing.mesh.rotation.z=-(hrs/12)*Math.PI*2;
+
+  // ゆらゆら揺れを追加
+  const wobble = Math.sin(elapsed*0.001)*0.05;   // 全体の揺れ角度
+  secRing.mesh.rotation.z = -(sec/60)*Math.PI*2 + wobble*2;  // 秒は揺れ大きめ
+  minRing.mesh.rotation.z = -(min/60)*Math.PI*2 + wobble*1;  // 分は中くらい
+  hourRing.mesh.rotation.z= -(hrs/12)*Math.PI*2 + wobble*0.5; // 時は小さめ
+
+  // さらにリングの傾きも揺らす
+  secRing.mesh.rotation.x = Math.sin(elapsed*0.002)*0.1;
+  minRing.mesh.rotation.y = Math.cos(elapsed*0.0015)*0.08;
+  hourRing.mesh.rotation.x = Math.sin(elapsed*0.001)*0.05;
 
   // 色変化
   const hueShift=(elapsed/100)%360;
