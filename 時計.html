@@ -2,102 +2,109 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>幻想的な時計リング</title>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js"></script>
+  <title>幻想的なホログラム時計</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #e6e6e6; /* 白寄りの灰色 */
+    }
+    canvas {
+      display: block;
+    }
+  </style>
 </head>
-<body style="margin:0; overflow:hidden; background:#ddd;">
+<body>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
+  // --- 基本セットアップ ---
   const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+  camera.position.z = 8;
 
-  // カメラ
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
-  camera.position.z = 40;
-
-  // レンダラー
-  const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  const renderer = new THREE.WebGLRenderer({antialias: true});
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  // 光
-  const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
-  scene.add(ambientLight);
-
-  const pointLight = new THREE.PointLight(0xffffff, 1.2);
-  pointLight.position.set(20, 20, 20);
-  scene.add(pointLight);
-
-  // 中央の白い球体
-  const sphereGeometry = new THREE.SphereGeometry(3, 64, 64);
+  // --- 中央の白い球体 ---
+  const sphereGeometry = new THREE.SphereGeometry(1.2, 64, 64);
   const sphereMaterial = new THREE.MeshPhongMaterial({
     color: 0xffffff,
     emissive: 0xaaaaaa,
+    shininess: 100,
     transparent: true,
-    opacity: 0.9,
-    shininess: 150
+    opacity: 0.9
   });
-  const centerSphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-  scene.add(centerSphere);
+  const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+  scene.add(sphere);
 
-  // 球体の拡大制御
-  let sphereBaseScale = 1.0;
+  // --- 照明 ---
+  const light = new THREE.PointLight(0xffffff, 2, 100);
+  light.position.set(10, 10, 10);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 
-  // リング管理
+  // --- リング格納用 ---
   const rings = [];
-  const ringColors = [
-    0xffcccc, 0xccffcc, 0xccccff, 0xffffcc,
-    0xccffff, 0xffccff, 0xe0e0e0, 0xd0d0ff, 0xffd0d0
-  ];
-  let ringIndex = 0;
+  const maxColors = 100;
+  const pastelColors = Array.from({length: maxColors}, (_, i) => {
+    const hue = (i * 360 / maxColors) % 360;
+    return new THREE.Color(`hsl(${hue}, 70%, 85%)`);
+  });
 
-  function createRing(size) {
-    const geometry = new THREE.RingGeometry(size, size + 0.2, 128);
+  function createRing(color, radius) {
+    const geometry = new THREE.RingGeometry(radius, radius + 0.05, 128);
     const material = new THREE.MeshBasicMaterial({
-      color: ringColors[ringIndex % ringColors.length],
+      color: color,
       side: THREE.DoubleSide,
       transparent: true,
       opacity: 0
     });
-    const ring = new THREE.Mesh(geometry, material);
-    rings.push({mesh: ring, life: 0});
-    scene.add(ring);
-    ringIndex++;
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.x = Math.PI / 2;
+    scene.add(mesh);
+    return mesh;
   }
 
-  // 最初の3つ
-  for (let i=0; i<3; i++) {
-    createRing(5 + i*2);
+  // 初期リング
+  for (let i = 0; i < 3; i++) {
+    const ring = createRing(pastelColors[i], 2 + i * 0.3);
+    ring.material.opacity = 0.6;
+    rings.push(ring);
   }
 
-  // 定期的にリング追加（今は10秒ごと）
+  // --- 時間経過でリングを追加 ---
+  let ringIndex = 3;
   setInterval(() => {
-    createRing(5 + rings.length * 2);
-  }, 10000);
+    if (ringIndex < maxColors) {
+      const newRing = createRing(pastelColors[ringIndex], 2 + ringIndex * 0.3);
+      rings.push(newRing);
+      ringIndex++;
+    }
+  }, 10000); // テスト用：10秒で追加
 
-  // アニメーション
+  // --- アニメーション ---
   function animate() {
     requestAnimationFrame(animate);
 
-    // 球体をじわじわ大きく
-    sphereBaseScale += 0.0002;
-    centerSphere.scale.set(sphereBaseScale, sphereBaseScale, sphereBaseScale);
+    // 球体を少しずつ大きくする
+    sphere.scale.x += 0.0002;
+    sphere.scale.y += 0.0002;
+    sphere.scale.z += 0.0002;
 
-    // リング制御
-    rings.forEach((ringObj, i) => {
-      const ring = ringObj.mesh;
-      ring.rotation.z += 0.002 * (i%2===0 ? 1 : -1);
-
-      // フェードイン
-      if (ring.material.opacity < 0.4) {
+    // リングの回転とフェードイン
+    rings.forEach((ring, i) => {
+      ring.rotation.z += 0.002;
+      if (ring.material.opacity < 0.6) {
         ring.material.opacity += 0.002;
       }
     });
 
     renderer.render(scene, camera);
   }
+
   animate();
 
-  // リサイズ対応
   window.addEventListener("resize", () => {
     camera.aspect = window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
