@@ -72,7 +72,7 @@ function createCore(){
 }
 scene.add(createCore());
 
-// === 時計リング（煙っぽさ追加） ===
+// === 時計リング（色を強めて煙っぽさ追加） ===
 function createDynamicRing(radius, opacity=0.6){
   const cvs = document.createElement("canvas");
   cvs.width = cvs.height = 1024;
@@ -83,19 +83,19 @@ function createDynamicRing(radius, opacity=0.6){
     const r = cvs.width/2;
     ctx.clearRect(0,0,cvs.width,cvs.height);
 
-    // --- 虹色グラデーション ---
+    // --- 虹色グラデーション（強め） ---
     const grad = ctx.createConicGradient(0,r,r);
     for(let i=0;i<=1;i+=0.2){
       const hue = (i*360+hueShift)%360;
-      grad.addColorStop(i,`hsla(${hue},100%,65%,0.25)`);
+      grad.addColorStop(i,`hsla(${hue},100%,65%,0.6)`); // ← 透明度を強めた
     }
     ctx.fillStyle=grad;
     ctx.beginPath();ctx.arc(r,r,r,0,Math.PI*2);ctx.fill();
 
-    // --- 煙っぽい淡い境界 ---
-    const mask = ctx.createRadialGradient(r,r,r*0.2, r,r,r*1.1);
+    // --- 境界を淡くするマスク（でも少し濃く） ---
+    const mask = ctx.createRadialGradient(r,r,r*0.25, r,r,r*1.05);
     mask.addColorStop(0.0,"rgba(0,0,0,0)");
-    mask.addColorStop(0.5,"rgba(0,0,0,0.2)");
+    mask.addColorStop(0.5,"rgba(0,0,0,0.25)"); // ← 濃さUP
     mask.addColorStop(1.0,"rgba(0,0,0,0)");
 
     ctx.globalCompositeOperation="destination-in";
@@ -108,7 +108,7 @@ function createDynamicRing(radius, opacity=0.6){
 
   const geo = new THREE.PlaneGeometry(radius*2,radius*2);
   const mat = new THREE.MeshBasicMaterial({
-    map:tex,transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false
+    map:tex,transparent:true,opacity:opacity,side:THREE.DoubleSide,depthWrite:false
   });
   const mesh=new THREE.Mesh(geo,mat);
   return {mesh,draw,material:mat};
