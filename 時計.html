@@ -95,7 +95,7 @@ function createDynamicRing(radius, opacity=0.6){
     // --- 境界を淡くするマスク（でも少し濃く） ---
     const mask = ctx.createRadialGradient(r,r,r*0.25, r,r,r*1.05);
     mask.addColorStop(0.0,"rgba(0,0,0,0)");
-    mask.addColorStop(0.5,"rgba(0,0,0,0.35)"); // ← 濃さUP
+    mask.addColorStop(0.5,"rgba(0,0,0,0.25)"); // ← 濃さUP
     mask.addColorStop(1.0,"rgba(0,0,0,0)");
 
     ctx.globalCompositeOperation="destination-in";
