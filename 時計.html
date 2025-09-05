@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>幻想的な多層リング時計＋コア拡大</title>
+  <title>幻想的な多層リング時計</title>
   <style>
     body { margin:0; overflow:hidden; background:#eeeeee; }
     canvas { display:block; }
@@ -70,10 +70,9 @@ function createCore(){
   group.add(new THREE.Mesh(auraGeo, auraMat));
   return group;
 }
-const coreGroup = createCore();
-scene.add(coreGroup);
+scene.add(createCore());
 
-// === 時計リング ===
+// === 時計リング（色を強めて煙っぽさ追加） ===
 function createDynamicRing(radius, opacity=0.6){
   const cvs = document.createElement("canvas");
   cvs.width = cvs.height = 1024;
@@ -84,19 +83,19 @@ function createDynamicRing(radius, opacity=0.6){
     const r = cvs.width/2;
     ctx.clearRect(0,0,cvs.width,cvs.height);
 
-    // --- 虹色グラデーション ---
+    // --- 虹色グラデーション（強め） ---
     const grad = ctx.createConicGradient(0,r,r);
     for(let i=0;i<=1;i+=0.2){
       const hue = (i*360+hueShift)%360;
-      grad.addColorStop(i,`hsla(${hue},100%,65%,0.6)`);
+      grad.addColorStop(i,`hsla(${hue},100%,65%,0.6)`); // ← 透明度を強めた
     }
     ctx.fillStyle=grad;
     ctx.beginPath();ctx.arc(r,r,r,0,Math.PI*2);ctx.fill();
 
-    // --- 境界を淡く ---
+    // --- 境界を淡くするマスク（でも少し濃く） ---
     const mask = ctx.createRadialGradient(r,r,r*0.25, r,r,r*1.05);
     mask.addColorStop(0.0,"rgba(0,0,0,0)");
-    mask.addColorStop(0.5,"rgba(0,0,0,0.35)");
+    mask.addColorStop(0.5,"rgba(0,0,0,0.35)"); // ← 濃さUP
     mask.addColorStop(1.0,"rgba(0,0,0,0)");
 
     ctx.globalCompositeOperation="destination-in";
@@ -115,20 +114,17 @@ function createDynamicRing(radius, opacity=0.6){
   return {mesh,draw,material:mat};
 }
 
-// 中央の時計リング
+// === 中央の時計リング ===
 const secRing=createDynamicRing(1.4);
 const minRing=createDynamicRing(1.7);
 const hourRing=createDynamicRing(2.0);
 scene.add(secRing.mesh,minRing.mesh,hourRing.mesh);
 
-// 外側リング管理
+// === 外側リング管理 ===
 const extraRings=[];
 const startTime=Date.now();
-const intervalMs=5000;
+const intervalMs=5000; // 5秒ごとに追加
 let ringCount=0;
-
-// コア拡大アニメーション用
-let coreAnim = {active:false, start:0, duration:2000};
 
 // === アニメーション ===
 function animate(){
@@ -141,6 +137,7 @@ function animate(){
   const min=dt.getMinutes()+sec/60;
   const hrs=(dt.getHours()%12)+min/60;
 
+  // 時計リングに揺れを加える（煙っぽくゆらゆら）
   const wobble = Math.sin(elapsed*0.001)*0.05;
   secRing.mesh.rotation.z = -(sec/60)*Math.PI*2 + wobble*2;
   minRing.mesh.rotation.z = -(min/60)*Math.PI*2 + wobble*1;
@@ -150,17 +147,19 @@ function animate(){
   minRing.mesh.rotation.y = Math.cos(elapsed*0.0015)*0.08;
   hourRing.mesh.rotation.x = Math.sin(elapsed*0.001)*0.05;
 
+  // スケールにゆらぎ
   const scalePulse = 1 + Math.sin(elapsed*0.0015)*0.05;
   [secRing.mesh,minRing.mesh,hourRing.mesh].forEach(r=>{
     r.scale.set(scalePulse,scalePulse,1);
   });
 
+  // 色変化
   const hueShift=(elapsed/100)%360;
   secRing.draw(hueShift);
   minRing.draw(hueShift*0.5);
   hourRing.draw(hueShift*0.2);
 
-  // 外側リング追加
+  // 外側リングを追加
   const shouldCount=Math.floor(elapsed/intervalMs);
   while(ringCount<shouldCount){
     const radius=2.5+ringCount*0.8;
@@ -169,32 +168,17 @@ function animate(){
     scene.add(newRing.mesh);
     extraRings.push(newRing);
     ringCount++;
-
-    // コア拡大アニメーションをランダムタイミングで発火
-    if(Math.random()<0.7){
-      coreAnim={active:true,start:now,duration:2000};
-    }
   }
 
-  // 外側リング更新
+  // 外側リングを更新（煙が消えるように）
   extraRings.forEach(r=>{
     const age=now-r.mesh.userData.createdAt;
     const t=Math.min(1,age/r.mesh.userData.fadeDuration);
-    r.material.opacity=0.4*(1-t);
-    r.draw(hueShift*0.3 + r.mesh.position.z*10);
-    r.mesh.rotation.z += 0.0003;
-    r.mesh.scale.set(1+t*0.3,1+t*0.3,1);
+    r.material.opacity=0.4*(1-t); // フェードアウト
+    r.draw(hueShift*0.3 + r.mesh.position.z*10); 
+    r.mesh.rotation.z += 0.0003; 
+    r.mesh.scale.set(1+t*0.3,1+t*0.3,1); // ゆっくり広がる
   });
-
-  // コア拡大アニメーション
-  if(coreAnim.active){
-    const t=(now-coreAnim.start)/coreAnim.duration;
-    if(t>=1){ coreAnim.active=false; coreGroup.scale.set(1,1,1); }
-    else{
-      const s=1+0.2*Math.sin(t*Math.PI); // 膨らんで戻る
-      coreGroup.scale.set(s,s,1);
-    }
-  }
 
   renderer.render(scene,camera);
 }
