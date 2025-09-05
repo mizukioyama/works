@@ -120,56 +120,47 @@ function createSolidRing(radius, color, targetOpacity=0.5, fadeDuration=2000) {
   return mesh;
 }
 
-// === 時計リング ===
-function createDynamicRing(radius) {
+// === 時計リング（単色バージョン） ===
+function createFixedRing(radius, color) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 1024;
   const ctx = canvas.getContext("2d");
+  const r = canvas.width/2;
+
+  // 単色塗り
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(r, r, r, 0, Math.PI*2);
+  ctx.fill();
+
+  // マスクで淡く
+  const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
+  mask.addColorStop(0.0, "rgba(0,0,0,0)");
+  mask.addColorStop(0.5, "rgba(0,0,0,0.7)");
+  mask.addColorStop(1.0, "rgba(0,0,0,0)");
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.fillStyle = mask;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
   const texture = new THREE.CanvasTexture(canvas);
-
-  function draw(hueShift) {
-    const r = canvas.width/2;
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-
-    const grad = ctx.createConicGradient(0, r, r);
-    for (let i = 0; i <= 1; i += 0.2) {
-      const hue = (i * 360 + hueShift) % 360;
-      grad.addColorStop(i, `hsla(${hue}, 100%, 60%, 0.25)`);
-    }
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(r, r, r, 0, Math.PI*2);
-    ctx.fill();
-
-    const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
-    mask.addColorStop(0.0, "rgba(0,0,0,0)");
-    mask.addColorStop(0.5, "rgba(0,0,0,0.7)");
-    mask.addColorStop(1.0, "rgba(0,0,0,0)");
-    ctx.globalCompositeOperation = "destination-in";
-    ctx.fillStyle = mask;
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.globalCompositeOperation = "source-over";
-
-    texture.needsUpdate = true;
-  }
-
   const geo = new THREE.PlaneGeometry(radius*2, radius*2);
   const mat = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.6, // 淡く
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
-    depthWrite: true
+    depthWrite: false
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  return { mesh, draw };
+  return new THREE.Mesh(geo, mat);
 }
 
-const secRing = createDynamicRing(1.4);
-const minRing = createDynamicRing(1.7);
-const hourRing = createDynamicRing(2.0);
-scene.add(secRing.mesh, minRing.mesh, hourRing.mesh);
+// === 秒・分・時リングを色分けして作成 ===
+const secRing = createFixedRing(1.4, "hsla(200, 100%, 70%, 0.6)"); // 水色系
+const minRing = createFixedRing(1.7, "hsla(280, 100%, 75%, 0.6)"); // 紫系
+const hourRing = createFixedRing(2.0, "hsla(120, 80%, 65%, 0.6)"); // 緑系
+
+scene.add(secRing, minRing, hourRing);
 
 // === 背景リング管理 ===
 const backgroundGroup = new THREE.Group();
