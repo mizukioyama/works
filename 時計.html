@@ -38,7 +38,7 @@ function createGlowTexture(size=512){
   const g = ctx.createRadialGradient(r,r,r*0.05, r,r,r);
   g.addColorStop(0.0,"rgba(255,255,255,1)");
   g.addColorStop(0.3,"rgba(220,240,255,0.6)");
-  g.addColorStop(0.6,"rgba(150,180,255,0.3)");
+  g.addColorStop(0.6,"rgba(150,180,255,0.25)");
   g.addColorStop(1.0,"rgba(0,0,0,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0,0,size,size);
@@ -72,7 +72,7 @@ function createCore(){
 }
 scene.add(createCore());
 
-// === 時計リング（動的色変化＋揺れ） ===
+// === 時計リング（煙っぽさ追加） ===
 function createDynamicRing(radius, opacity=0.6){
   const cvs = document.createElement("canvas");
   cvs.width = cvs.height = 1024;
@@ -87,15 +87,15 @@ function createDynamicRing(radius, opacity=0.6){
     const grad = ctx.createConicGradient(0,r,r);
     for(let i=0;i<=1;i+=0.2){
       const hue = (i*360+hueShift)%360;
-      grad.addColorStop(i,`hsla(${hue},100%,60%,0.25)`);
+      grad.addColorStop(i,`hsla(${hue},100%,65%,0.25)`);
     }
     ctx.fillStyle=grad;
     ctx.beginPath();ctx.arc(r,r,r,0,Math.PI*2);ctx.fill();
 
-    // --- 境界をもっと淡くするマスク ---
-    const mask = ctx.createRadialGradient(r,r,r*0.3, r,r,r*1.0);
+    // --- 煙っぽい淡い境界 ---
+    const mask = ctx.createRadialGradient(r,r,r*0.2, r,r,r*1.1);
     mask.addColorStop(0.0,"rgba(0,0,0,0)");
-    mask.addColorStop(0.7,"rgba(0,0,0,0.35)"); // 前より弱く
+    mask.addColorStop(0.5,"rgba(0,0,0,0.2)");
     mask.addColorStop(1.0,"rgba(0,0,0,0)");
 
     ctx.globalCompositeOperation="destination-in";
@@ -113,7 +113,6 @@ function createDynamicRing(radius, opacity=0.6){
   const mesh=new THREE.Mesh(geo,mat);
   return {mesh,draw,material:mat};
 }
-
 
 // === 中央の時計リング ===
 const secRing=createDynamicRing(1.4);
@@ -138,7 +137,7 @@ function animate(){
   const min=dt.getMinutes()+sec/60;
   const hrs=(dt.getHours()%12)+min/60;
 
-  // 時計リングに揺れを加える
+  // 時計リングに揺れを加える（煙っぽくゆらゆら）
   const wobble = Math.sin(elapsed*0.001)*0.05;
   secRing.mesh.rotation.z = -(sec/60)*Math.PI*2 + wobble*2;
   minRing.mesh.rotation.z = -(min/60)*Math.PI*2 + wobble*1;
@@ -147,6 +146,12 @@ function animate(){
   secRing.mesh.rotation.x = Math.sin(elapsed*0.002)*0.1;
   minRing.mesh.rotation.y = Math.cos(elapsed*0.0015)*0.08;
   hourRing.mesh.rotation.x = Math.sin(elapsed*0.001)*0.05;
+
+  // スケールにゆらぎ
+  const scalePulse = 1 + Math.sin(elapsed*0.0015)*0.05;
+  [secRing.mesh,minRing.mesh,hourRing.mesh].forEach(r=>{
+    r.scale.set(scalePulse,scalePulse,1);
+  });
 
   // 色変化
   const hueShift=(elapsed/100)%360;
@@ -159,18 +164,20 @@ function animate(){
   while(ringCount<shouldCount){
     const radius=2.5+ringCount*0.8;
     const newRing=createDynamicRing(radius,0.4);
-    newRing.mesh.userData={createdAt:now,fadeDuration:3000};
+    newRing.mesh.userData={createdAt:now,fadeDuration:6000};
     scene.add(newRing.mesh);
     extraRings.push(newRing);
     ringCount++;
   }
 
-  // 外側リングを更新
+  // 外側リングを更新（煙が消えるように）
   extraRings.forEach(r=>{
-    const t=Math.min(1,(now-r.mesh.userData.createdAt)/r.mesh.userData.fadeDuration);
-    r.material.opacity=0.4*t;
-    r.draw(hueShift*0.3 + r.mesh.position.z*10); // 色変化
-    r.mesh.rotation.z += 0.0005; // ゆっくり回転
+    const age=now-r.mesh.userData.createdAt;
+    const t=Math.min(1,age/r.mesh.userData.fadeDuration);
+    r.material.opacity=0.4*(1-t); // フェードアウト
+    r.draw(hueShift*0.3 + r.mesh.position.z*10); 
+    r.mesh.rotation.z += 0.0003; 
+    r.mesh.scale.set(1+t*0.3,1+t*0.3,1); // ゆっくり広がる
   });
 
   renderer.render(scene,camera);
