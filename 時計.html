@@ -87,7 +87,7 @@ function createDynamicRing(radius, opacity=0.4){
     const grad = ctx.createConicGradient(0,r,r);
     for(let i=0;i<=1;i+=0.2){
       const hue = (i*360+hueShift)%360;
-      grad.addColorStop(i,`hsla(${hue},100%,70%,0.15)`); // より淡い
+      grad.addColorStop(i,`hsla(${hue},100%,70%,0.15)`);
     }
     ctx.fillStyle=grad;
     ctx.beginPath();ctx.arc(r,r,r,0,Math.PI*2);ctx.fill();
@@ -112,11 +112,23 @@ function createDynamicRing(radius, opacity=0.4){
     opacity:0,
     side:THREE.DoubleSide,
     depthWrite:false,
-    blending:THREE.AdditiveBlending // 光のように重なる
+    blending:THREE.AdditiveBlending
   });
   const mesh=new THREE.Mesh(geo,mat);
   return {mesh,draw,material:mat};
 }
+
+// === 中央の3つのリング ===
+const secRing=createDynamicRing(1.4);
+const minRing=createDynamicRing(1.7);
+const hourRing=createDynamicRing(2.0);
+scene.add(secRing.mesh,minRing.mesh,hourRing.mesh);
+
+// === 外側リング管理 ===
+const extraRings=[];
+const startTime=Date.now();
+const intervalMs=5000; // 5秒ごとに追加
+let ringCount=0;
 
 // === アニメーション ===
 function animate(){
@@ -150,7 +162,7 @@ function animate(){
   // 外側リング追加（間隔広げる）
   const shouldCount=Math.floor(elapsed/intervalMs);
   while(ringCount<shouldCount){
-    const radius=3.0+ringCount*1.0; // 感覚を広めに
+    const radius=3.0+ringCount*1.0;
     const newRing=createDynamicRing(radius,0.25);
     newRing.mesh.userData={createdAt:now,fadeDuration:4000};
     scene.add(newRing.mesh);
@@ -163,11 +175,12 @@ function animate(){
     const t=Math.min(1,(now-r.mesh.userData.createdAt)/r.mesh.userData.fadeDuration);
     r.material.opacity=0.3*t;
     r.draw(hueShift*0.2+i*15);
-    r.mesh.rotation.z += 0.0003 + Math.sin(elapsed*0.0005+i)*0.0002; // ゆらゆら回転
+    r.mesh.rotation.z += 0.0003 + Math.sin(elapsed*0.0005+i)*0.0002;
   });
 
   renderer.render(scene,camera);
 }
+animate();
 
 // === リサイズ ===
 window.addEventListener("resize",()=>{
