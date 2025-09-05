@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>幻想的な時計リング（柔らかゆらぎ回転）</title>
+  <title>幻想的な時計リング</title>
   <style>
     body { margin:0; overflow:hidden; background:#eeeeee; }
     canvas { display:block; }
@@ -38,7 +38,7 @@ function createGlowTexture(size=512){
   const g = ctx.createRadialGradient(r,r,r*0.05, r,r,r);
   g.addColorStop(0.0,"rgba(255,255,255,1)");
   g.addColorStop(0.3,"rgba(220,240,255,0.6)");
-  g.addColorStop(0.6,"rgba(150,180,255,0.25)");
+  g.addColorStop(0.6,"rgba(150,180,255,0.3)");
   g.addColorStop(1.0,"rgba(0,0,0,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0,0,size,size);
@@ -53,147 +53,35 @@ function createCore(){
     map:createGlowTexture(),transparent:true,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,depthWrite:false
   });
   group.add(new THREE.Mesh(coreGeo, coreMat));
-  const auraGeo = new THREE.PlaneGeometry(5,5);
+  const auraGeo = new THREE.PlaneGeometry(4.5,4.5);
   const auraMat = new THREE.MeshBasicMaterial({
-    map:createGlowTexture(),transparent:true,opacity:0.3,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,depthWrite:false
+    map:createGlowTexture(),transparent:true,opacity:0.35,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,depthWrite:false
   });
   group.add(new THREE.Mesh(auraGeo, auraMat));
   return group;
 }
 scene.add(createCore());
 
-// === 柔らかいリング（境界を淡く） ===
-function createDynamicRing(radius){
-  const cvs = document.createElement("canvas");
-  cvs.width = cvs.height = 1024;
-  const ctx = cvs.getContext("2d");
-  const tex = new THREE.CanvasTexture(cvs);
-
-  function draw(hueShift){
-    const r = cvs.width/2;
-    ctx.clearRect(0,0,cvs.width,cvs.height);
-
-    // 柔らかい虹色グラデーション
-    const grad = ctx.createConicGradient(0,r,r);
-    for(let i=0;i<=1;i+=0.1){
-      const hue = (i*360+hueShift)%360;
-      grad.addColorStop(i,`hsla(${hue},100%,65%,0.25)`);
-    }
-    ctx.fillStyle=grad;
-    ctx.beginPath();ctx.arc(r,r,r,0,Math.PI*2);ctx.fill();
-
-    // 柔らかいマスク（境界を淡く）
-    const mask = ctx.createRadialGradient(r,r,r*0.4,r,r,r*0.98);
-    mask.addColorStop(0,"rgba(0,0,0,0)");
-    mask.addColorStop(0.6,"rgba(0,0,0,0.5)");
-    mask.addColorStop(1,"rgba(0,0,0,0)");
-    ctx.globalCompositeOperation="destination-in";
-    ctx.fillStyle=mask;ctx.fillRect(0,0,cvs.width,cvs.height);
-    ctx.globalCompositeOperation="source-over";
-
-    tex.needsUpdate=true;
-  }
-
-  const geo = new THREE.PlaneGeometry(radius*2,radius*2);
-  const mat = new THREE.MeshBasicMaterial({
-    map:tex,transparent:true,opacity:0.65,side:THREE.DoubleSide,depthWrite:false
-  });
-  const mesh=new THREE.Mesh(geo,mat);
-  return {mesh,draw};
-}
-
-// === 時計リング ===
-const secRing=createDynamicRing(1.4);
-const minRing=createDynamicRing(1.7);
-const hourRing=createDynamicRing(2.1);
-scene.add(secRing.mesh,minRing.mesh,hourRing.mesh);
-
-// === 背景リング管理 ===
-const backgroundGroup=new THREE.Group();
-backgroundGroup.position.z=-8;
-scene.add(backgroundGroup);
-
-const extraRings=[];
-const startTime=Date.now();
-const intervalMs=4000; // 4秒ごとに追加
-
-function randomPastel(){
-  const h=Math.random()*360;
-  const s=50+Math.random()*20;
-  const l=70+Math.random()*15;
-  return `hsl(${h},${s}%,${l}%)`;
-}
-
-// === アニメーション ===
-function animate(){
-  requestAnimationFrame(animate);
-  const now=Date.now();
-  const elapsed=now-startTime;
-
-  const dt=new Date();
-  const sec=dt.getSeconds()+dt.getMilliseconds()/1000;
-  const min=dt.getMinutes()+sec/60;
-  const hrs=(dt.getHours()%12)+min/60;
-
-  // ゆらぎのある回転（幻想的に）
-  const wobble = Math.sin(elapsed*0.0012)*0.08 + Math.cos(elapsed*0.0007)*0.05;
-
-  secRing.mesh.rotation.z = -(sec/60)*Math.PI*2 + wobble*1.5;
-  minRing.mesh.rotation.z = -(min/60)*Math.PI*2 + wobble;
-  hourRing.mesh.rotation.z= -(hrs/12)*Math.PI*2 + wobble*0.5;
-
-  // 立体的なゆらぎ
-  secRing.mesh.rotation.x = Math.sin(elapsed*0.0018)*0.12;
-  minRing.mesh.rotation.y = Math.cos(elapsed*0.0012)*0.1;
-  hourRing.mesh.rotation.x = Math.sin(elapsed*0.0009)*0.07;
-
-  // 色変化
-  const hueShift=(elapsed/120)%360;
-  secRing.draw(hueShift*1.5);
-  minRing.draw(hueShift*0.7);
-  hourRing.draw(hueShift*0.3);
-
-  // 背景リング追加
-  const shouldCount=Math.floor(elapsed/intervalMs);
-  while(extraRings.length<shouldCount){
-    const radius=2.8+extraRings.length*0.5;
-    const color=randomPastel();
-    const ring=createSolidRing(radius,color,0.35,2500);
-    backgroundGroup.add(ring);
-    extraRings.push(ring);
-  }
-
-  // 背景リングフェードイン
-  extraRings.forEach(r=>{
-    const t=Math.min(1,(now-r.userData.createdAt)/r.userData.fadeDuration);
-    r.material.opacity=r.userData.targetOpacity*t;
-  });
-
-  renderer.render(scene,camera);
-}
-animate();
-
-// === 単色リング（背景用） ===
-function createSolidRing(radius, color, targetOpacity=0.35, fadeDur=2000){
+// === 単色リング（境目ぼかし付き） ===
+function createSoftRing(radius, color, targetOpacity=0.4, fadeDur=2000){
   const cvs = document.createElement("canvas");
   cvs.width = cvs.height = 512;
   const ctx = cvs.getContext("2d");
   const r = cvs.width/2;
 
+  // 塗りつぶし
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(r,r,r,0,Math.PI*2);
   ctx.fill();
 
-  // 柔らかいマスクで境界を淡く
-  const mask = ctx.createRadialGradient(r,r,r*0.3, r,r,r*0.98);
+  // マスクで境界をぼかす
+  const mask = ctx.createRadialGradient(r,r,r*0.6, r,r,r*0.95);
   mask.addColorStop(0.0,"rgba(0,0,0,0)");
-  mask.addColorStop(0.6,"rgba(0,0,0,0.9)");
-  mask.addColorStop(1.0,"rgba(0,0,0,0)");
+  mask.addColorStop(1.0,"rgba(0,0,0,1)");
   ctx.globalCompositeOperation="destination-in";
   ctx.fillStyle=mask;
   ctx.fillRect(0,0,cvs.width,cvs.height);
-  ctx.globalCompositeOperation="source-over";
 
   const tex = new THREE.CanvasTexture(cvs);
   const geo = new THREE.PlaneGeometry(radius*2, radius*2);
@@ -204,6 +92,90 @@ function createSolidRing(radius, color, targetOpacity=0.35, fadeDur=2000){
   mesh.userData = {targetOpacity, createdAt:Date.now(), fadeDuration:fadeDur};
   return mesh;
 }
+
+// === 時計リング（淡い色＋ゆらぎ） ===
+function createClockRing(radius, color){
+  const cvs = document.createElement("canvas");
+  cvs.width = cvs.height = 1024;
+  const ctx = cvs.getContext("2d");
+  const tex = new THREE.CanvasTexture(cvs);
+
+  function draw(){
+    const r = cvs.width/2;
+    ctx.clearRect(0,0,cvs.width,cvs.height);
+    const g = ctx.createRadialGradient(r,r,r*0.6, r,r,r*0.95);
+    g.addColorStop(0.0, color.replace("0.6","0.3"));
+    g.addColorStop(1.0, "rgba(0,0,0,0)");
+    ctx.fillStyle=g;
+    ctx.beginPath();ctx.arc(r,r,r,0,Math.PI*2);ctx.fill();
+    tex.needsUpdate=true;
+  }
+
+  const geo = new THREE.PlaneGeometry(radius*2, radius*2);
+  const mat = new THREE.MeshBasicMaterial({
+    map:tex,transparent:true,opacity:0.6,side:THREE.DoubleSide,depthWrite:false
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  draw();
+  return mesh;
+}
+
+const secRing=createClockRing(1.4,"rgba(180,200,255,0.6)");
+const minRing=createClockRing(1.7,"rgba(200,180,255,0.6)");
+const hourRing=createClockRing(2.0,"rgba(255,200,220,0.6)");
+scene.add(secRing,minRing,hourRing);
+
+// === 背景リング管理 ===
+const backgroundGroup=new THREE.Group();
+backgroundGroup.position.z=-6;
+scene.add(backgroundGroup);
+
+const extraRings=[];
+const startTime=Date.now();
+const intervalMs=4000; // 4秒ごと
+
+function randomPastel(){
+  const h=Math.random()*360;
+  return `hsl(${h},70%,80%)`;
+}
+
+// === アニメーション ===
+function animate(){
+  requestAnimationFrame(animate);
+  const now=Date.now();
+  const elapsed=now-startTime;
+
+  // 時計リング回転 + ゆらぎ
+  const dt=new Date();
+  const sec=dt.getSeconds()+dt.getMilliseconds()/1000;
+  const min=dt.getMinutes()+sec/60;
+  const hrs=(dt.getHours()%12)+min/60;
+
+  const wobble = Math.sin(elapsed*0.001)*0.05;
+
+  secRing.rotation.z = -(sec/60)*Math.PI*2 + wobble*2;
+  minRing.rotation.z = -(min/60)*Math.PI*2 + wobble*1;
+  hourRing.rotation.z= -(hrs/12)*Math.PI*2 + wobble*0.5;
+
+  // 背景リング追加
+  const shouldCount=Math.floor(elapsed/intervalMs);
+  while(extraRings.length<shouldCount){
+    const radius=2.5+extraRings.length*0.4;
+    const color=randomPastel();
+    const ring=createSoftRing(radius,color,0.4,2000);
+    backgroundGroup.add(ring);
+    extraRings.push(ring);
+  }
+
+  // フェードイン
+  extraRings.forEach(r=>{
+    const t=Math.min(1,(now-r.userData.createdAt)/r.userData.fadeDuration);
+    r.material.opacity=r.userData.targetOpacity*t;
+  });
+
+  renderer.render(scene,camera);
+}
+animate();
 
 // === リサイズ ===
 window.addEventListener("resize",()=>{
