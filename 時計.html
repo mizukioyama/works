@@ -72,8 +72,8 @@ function createCore(){
 }
 scene.add(createCore());
 
-// === 時計リング（オーラ風ゆらぎ） ===
-function createDynamicRing(radius, opacity=0.4){
+// === 時計リング（動的色変化＋揺れ） ===
+function createDynamicRing(radius, opacity=0.6){
   const cvs = document.createElement("canvas");
   cvs.width = cvs.height = 1024;
   const ctx = cvs.getContext("2d");
@@ -83,20 +83,21 @@ function createDynamicRing(radius, opacity=0.4){
     const r = cvs.width/2;
     ctx.clearRect(0,0,cvs.width,cvs.height);
 
-    // --- 煙っぽい淡いグラデーション ---
+    // --- 虹色グラデーション ---
     const grad = ctx.createConicGradient(0,r,r);
     for(let i=0;i<=1;i+=0.2){
       const hue = (i*360+hueShift)%360;
-      grad.addColorStop(i,`hsla(${hue},100%,70%,0.15)`);
+      grad.addColorStop(i,`hsla(${hue},100%,60%,0.25)`);
     }
     ctx.fillStyle=grad;
     ctx.beginPath();ctx.arc(r,r,r,0,Math.PI*2);ctx.fill();
 
-    // --- 霧っぽく境界を淡くするマスク ---
-    const mask = ctx.createRadialGradient(r,r,r*0.2, r,r,r*1.1);
+    // --- 境界をもっと淡くするマスク ---
+    const mask = ctx.createRadialGradient(r,r,r*0.3, r,r,r*1.0);
     mask.addColorStop(0.0,"rgba(0,0,0,0)");
-    mask.addColorStop(0.6,"rgba(0,0,0,0.25)");
+    mask.addColorStop(0.7,"rgba(0,0,0,0.35)"); // 前より弱く
     mask.addColorStop(1.0,"rgba(0,0,0,0)");
+
     ctx.globalCompositeOperation="destination-in";
     ctx.fillStyle=mask;
     ctx.fillRect(0,0,cvs.width,cvs.height);
@@ -107,18 +108,14 @@ function createDynamicRing(radius, opacity=0.4){
 
   const geo = new THREE.PlaneGeometry(radius*2,radius*2);
   const mat = new THREE.MeshBasicMaterial({
-    map:tex,
-    transparent:true,
-    opacity:0,
-    side:THREE.DoubleSide,
-    depthWrite:false,
-    blending:THREE.AdditiveBlending
+    map:tex,transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false
   });
   const mesh=new THREE.Mesh(geo,mat);
   return {mesh,draw,material:mat};
 }
 
-// === 中央の3つのリング ===
+
+// === 中央の時計リング ===
 const secRing=createDynamicRing(1.4);
 const minRing=createDynamicRing(1.7);
 const hourRing=createDynamicRing(2.0);
@@ -141,41 +138,39 @@ function animate(){
   const min=dt.getMinutes()+sec/60;
   const hrs=(dt.getHours()%12)+min/60;
 
-  // 中央の3リングにゆらぎを追加
-  const wobble = Math.sin(elapsed*0.001)*0.08;
+  // 時計リングに揺れを加える
+  const wobble = Math.sin(elapsed*0.001)*0.05;
   secRing.mesh.rotation.z = -(sec/60)*Math.PI*2 + wobble*2;
-  minRing.mesh.rotation.z = -(min/60)*Math.PI*2 + wobble*1.5;
-  hourRing.mesh.rotation.z= -(hrs/12)*Math.PI*2 + wobble*1;
+  minRing.mesh.rotation.z = -(min/60)*Math.PI*2 + wobble*1;
+  hourRing.mesh.rotation.z= -(hrs/12)*Math.PI*2 + wobble*0.5;
 
-  // ランダムな揺れ（オーラっぽさ）
-  secRing.mesh.rotation.x = Math.sin(elapsed*0.0012)*0.12;
-  secRing.mesh.rotation.y = Math.cos(elapsed*0.0015)*0.1;
-  minRing.mesh.rotation.x = Math.sin(elapsed*0.001)*0.08;
-  hourRing.mesh.rotation.y = Math.cos(elapsed*0.0008)*0.05;
+  secRing.mesh.rotation.x = Math.sin(elapsed*0.002)*0.1;
+  minRing.mesh.rotation.y = Math.cos(elapsed*0.0015)*0.08;
+  hourRing.mesh.rotation.x = Math.sin(elapsed*0.001)*0.05;
 
-  // 色変化（遅めで淡く）
-  const hueShift=(elapsed/200)%360;
+  // 色変化
+  const hueShift=(elapsed/100)%360;
   secRing.draw(hueShift);
   minRing.draw(hueShift*0.5);
-  hourRing.draw(hueShift*0.25);
+  hourRing.draw(hueShift*0.2);
 
-  // 外側リング追加（間隔広げる）
+  // 外側リングを追加
   const shouldCount=Math.floor(elapsed/intervalMs);
   while(ringCount<shouldCount){
-    const radius=3.0+ringCount*1.0;
-    const newRing=createDynamicRing(radius,0.25);
-    newRing.mesh.userData={createdAt:now,fadeDuration:4000};
+    const radius=2.5+ringCount*0.8;
+    const newRing=createDynamicRing(radius,0.4);
+    newRing.mesh.userData={createdAt:now,fadeDuration:3000};
     scene.add(newRing.mesh);
     extraRings.push(newRing);
     ringCount++;
   }
 
-  // 外側リング更新
-  extraRings.forEach((r,i)=>{
+  // 外側リングを更新
+  extraRings.forEach(r=>{
     const t=Math.min(1,(now-r.mesh.userData.createdAt)/r.mesh.userData.fadeDuration);
-    r.material.opacity=0.3*t;
-    r.draw(hueShift*0.2+i*15);
-    r.mesh.rotation.z += 0.0003 + Math.sin(elapsed*0.0005+i)*0.0002;
+    r.material.opacity=0.4*t;
+    r.draw(hueShift*0.3 + r.mesh.position.z*10); // 色変化
+    r.mesh.rotation.z += 0.0005; // ゆっくり回転
   });
 
   renderer.render(scene,camera);
