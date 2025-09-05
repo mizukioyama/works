@@ -82,6 +82,8 @@ function createDynamicRing(radius, opacity=0.6){
   function draw(hueShift){
     const r = cvs.width/2;
     ctx.clearRect(0,0,cvs.width,cvs.height);
+
+    // --- 虹色グラデーション ---
     const grad = ctx.createConicGradient(0,r,r);
     for(let i=0;i<=1;i+=0.2){
       const hue = (i*360+hueShift)%360;
@@ -89,13 +91,18 @@ function createDynamicRing(radius, opacity=0.6){
     }
     ctx.fillStyle=grad;
     ctx.beginPath();ctx.arc(r,r,r,0,Math.PI*2);ctx.fill();
-    const mask = ctx.createRadialGradient(r,r,r*0.4,r,r,r*0.95);
-    mask.addColorStop(0,"rgba(0,0,0,0)");
-    mask.addColorStop(0.5,"rgba(0,0,0,0.8)");
-    mask.addColorStop(1,"rgba(0,0,0,0)");
+
+    // --- 境界をもっと淡くするマスク ---
+    const mask = ctx.createRadialGradient(r,r,r*0.3, r,r,r*1.0);
+    mask.addColorStop(0.0,"rgba(0,0,0,0)");
+    mask.addColorStop(0.7,"rgba(0,0,0,0.5)"); // 前より弱く
+    mask.addColorStop(1.0,"rgba(0,0,0,0)");
+
     ctx.globalCompositeOperation="destination-in";
-    ctx.fillStyle=mask;ctx.fillRect(0,0,cvs.width,cvs.height);
+    ctx.fillStyle=mask;
+    ctx.fillRect(0,0,cvs.width,cvs.height);
     ctx.globalCompositeOperation="source-over";
+
     tex.needsUpdate=true;
   }
 
@@ -106,6 +113,7 @@ function createDynamicRing(radius, opacity=0.6){
   const mesh=new THREE.Mesh(geo,mat);
   return {mesh,draw,material:mat};
 }
+
 
 // === 中央の時計リング ===
 const secRing=createDynamicRing(1.4);
