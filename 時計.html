@@ -70,9 +70,10 @@ function createCore(){
   group.add(new THREE.Mesh(auraGeo, auraMat));
   return group;
 }
-scene.add(createCore());
+const coreGroup = createCore();
+scene.add(coreGroup);
 
-// === 時計リング（色を強めて煙っぽさ追加） ===
+// === 時計リング ===
 function createDynamicRing(radius, opacity=0.6){
   const cvs = document.createElement("canvas");
   cvs.width = cvs.height = 1024;
@@ -83,19 +84,17 @@ function createDynamicRing(radius, opacity=0.6){
     const r = cvs.width/2;
     ctx.clearRect(0,0,cvs.width,cvs.height);
 
-    // --- 虹色グラデーション（強め） ---
     const grad = ctx.createConicGradient(0,r,r);
     for(let i=0;i<=1;i+=0.2){
       const hue = (i*360+hueShift)%360;
-      grad.addColorStop(i,`hsla(${hue},100%,65%,0.6)`); // ← 透明度を強めた
+      grad.addColorStop(i,`hsla(${hue},100%,65%,0.6)`);
     }
     ctx.fillStyle=grad;
     ctx.beginPath();ctx.arc(r,r,r,0,Math.PI*2);ctx.fill();
 
-    // --- 境界を淡くするマスク（でも少し濃く） ---
     const mask = ctx.createRadialGradient(r,r,r*0.25, r,r,r*1.05);
     mask.addColorStop(0.0,"rgba(0,0,0,0)");
-    mask.addColorStop(0.5,"rgba(0,0,0,0.35)"); // ← 濃さUP
+    mask.addColorStop(0.5,"rgba(0,0,0,0.35)");
     mask.addColorStop(1.0,"rgba(0,0,0,0)");
 
     ctx.globalCompositeOperation="destination-in";
@@ -114,7 +113,7 @@ function createDynamicRing(radius, opacity=0.6){
   return {mesh,draw,material:mat};
 }
 
-// === 中央の時計リング ===
+// === 時計リング ===
 const secRing=createDynamicRing(1.4);
 const minRing=createDynamicRing(1.7);
 const hourRing=createDynamicRing(2.0);
@@ -125,6 +124,12 @@ const extraRings=[];
 const startTime=Date.now();
 const intervalMs=5000; // 5秒ごとに追加
 let ringCount=0;
+
+// === 中央の光球アニメーション ===
+let lastPulseTime=0;
+const corePulseInterval=7000; // 7秒ごとに膨らむ
+let coreScaleTarget=1;
+let coreScale=1;
 
 // === アニメーション ===
 function animate(){
@@ -137,7 +142,6 @@ function animate(){
   const min=dt.getMinutes()+sec/60;
   const hrs=(dt.getHours()%12)+min/60;
 
-  // 時計リングに揺れを加える（煙っぽくゆらゆら）
   const wobble = Math.sin(elapsed*0.001)*0.05;
   secRing.mesh.rotation.z = -(sec/60)*Math.PI*2 + wobble*2;
   minRing.mesh.rotation.z = -(min/60)*Math.PI*2 + wobble*1;
@@ -147,19 +151,17 @@ function animate(){
   minRing.mesh.rotation.y = Math.cos(elapsed*0.0015)*0.08;
   hourRing.mesh.rotation.x = Math.sin(elapsed*0.001)*0.05;
 
-  // スケールにゆらぎ
   const scalePulse = 1 + Math.sin(elapsed*0.0015)*0.05;
   [secRing.mesh,minRing.mesh,hourRing.mesh].forEach(r=>{
     r.scale.set(scalePulse,scalePulse,1);
   });
 
-  // 色変化
   const hueShift=(elapsed/100)%360;
   secRing.draw(hueShift);
   minRing.draw(hueShift*0.5);
   hourRing.draw(hueShift*0.2);
 
-  // 外側リングを追加
+  // 外側リング追加
   const shouldCount=Math.floor(elapsed/intervalMs);
   while(ringCount<shouldCount){
     const radius=2.5+ringCount*0.8;
@@ -170,21 +172,32 @@ function animate(){
     ringCount++;
   }
 
-  // 外側リングを更新（煙が消えるように）
+  // 外側リング更新
   extraRings.forEach(r=>{
     const age=now-r.mesh.userData.createdAt;
     const t=Math.min(1,age/r.mesh.userData.fadeDuration);
-    r.material.opacity=0.4*(1-t); // フェードアウト
+    r.material.opacity=0.4*(1-t);
     r.draw(hueShift*0.3 + r.mesh.position.z*10); 
     r.mesh.rotation.z += 0.0003; 
-    r.mesh.scale.set(1+t*0.3,1+t*0.3,1); // ゆっくり広がる
+    r.mesh.scale.set(1+t*0.3,1+t*0.3,1);
   });
+
+  // === 中央光球のアニメーション ===
+  if(now-lastPulseTime>corePulseInterval){
+    coreScaleTarget = 1.2; // 膨らむサイズ
+    lastPulseTime=now;
+  }
+  // 徐々に目標サイズへ近づける
+  coreScale += (coreScaleTarget-coreScale)*0.02;
+  if(Math.abs(coreScale-coreScaleTarget)<0.01 && coreScaleTarget>1){
+    coreScaleTarget=1; // 元に戻る
+  }
+  coreGroup.scale.set(coreScale,coreScale,1);
 
   renderer.render(scene,camera);
 }
 animate();
 
-// === リサイズ ===
 window.addEventListener("resize",()=>{
   camera.aspect=window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
