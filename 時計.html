@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>幻想的な多層リング時計</title>
+  <title>幻想的な多層リング時計＋コア拡大</title>
   <style>
     body { margin:0; overflow:hidden; background:#eeeeee; }
     canvas { display:block; }
@@ -84,6 +84,7 @@ function createDynamicRing(radius, opacity=0.6){
     const r = cvs.width/2;
     ctx.clearRect(0,0,cvs.width,cvs.height);
 
+    // --- 虹色グラデーション ---
     const grad = ctx.createConicGradient(0,r,r);
     for(let i=0;i<=1;i+=0.2){
       const hue = (i*360+hueShift)%360;
@@ -92,6 +93,7 @@ function createDynamicRing(radius, opacity=0.6){
     ctx.fillStyle=grad;
     ctx.beginPath();ctx.arc(r,r,r,0,Math.PI*2);ctx.fill();
 
+    // --- 境界を淡く ---
     const mask = ctx.createRadialGradient(r,r,r*0.25, r,r,r*1.05);
     mask.addColorStop(0.0,"rgba(0,0,0,0)");
     mask.addColorStop(0.5,"rgba(0,0,0,0.35)");
@@ -113,23 +115,20 @@ function createDynamicRing(radius, opacity=0.6){
   return {mesh,draw,material:mat};
 }
 
-// === 時計リング ===
+// 中央の時計リング
 const secRing=createDynamicRing(1.4);
 const minRing=createDynamicRing(1.7);
 const hourRing=createDynamicRing(2.0);
 scene.add(secRing.mesh,minRing.mesh,hourRing.mesh);
 
-// === 外側リング管理 ===
+// 外側リング管理
 const extraRings=[];
 const startTime=Date.now();
-const intervalMs=5000; // 5秒ごとに追加
+const intervalMs=5000;
 let ringCount=0;
 
-// === 中央の光球アニメーション ===
-let lastPulseTime=0;
-const corePulseInterval=7000; // 7秒ごとに膨らむ
-let coreScaleTarget=1;
-let coreScale=1;
+// コア拡大アニメーション用
+let coreAnim = {active:false, start:0, duration:2000};
 
 // === アニメーション ===
 function animate(){
@@ -170,6 +169,11 @@ function animate(){
     scene.add(newRing.mesh);
     extraRings.push(newRing);
     ringCount++;
+
+    // コア拡大アニメーションをランダムタイミングで発火
+    if(Math.random()<0.7){
+      coreAnim={active:true,start:now,duration:2000};
+    }
   }
 
   // 外側リング更新
@@ -177,27 +181,26 @@ function animate(){
     const age=now-r.mesh.userData.createdAt;
     const t=Math.min(1,age/r.mesh.userData.fadeDuration);
     r.material.opacity=0.4*(1-t);
-    r.draw(hueShift*0.3 + r.mesh.position.z*10); 
-    r.mesh.rotation.z += 0.0003; 
+    r.draw(hueShift*0.3 + r.mesh.position.z*10);
+    r.mesh.rotation.z += 0.0003;
     r.mesh.scale.set(1+t*0.3,1+t*0.3,1);
   });
 
-  // === 中央光球のアニメーション ===
-  if(now-lastPulseTime>corePulseInterval){
-    coreScaleTarget = 1.2; // 膨らむサイズ
-    lastPulseTime=now;
+  // コア拡大アニメーション
+  if(coreAnim.active){
+    const t=(now-coreAnim.start)/coreAnim.duration;
+    if(t>=1){ coreAnim.active=false; coreGroup.scale.set(1,1,1); }
+    else{
+      const s=1+0.2*Math.sin(t*Math.PI); // 膨らんで戻る
+      coreGroup.scale.set(s,s,1);
+    }
   }
-  // 徐々に目標サイズへ近づける
-  coreScale += (coreScaleTarget-coreScale)*0.02;
-  if(Math.abs(coreScale-coreScaleTarget)<0.01 && coreScaleTarget>1){
-    coreScaleTarget=1; // 元に戻る
-  }
-  coreGroup.scale.set(coreScale,coreScale,1);
 
   renderer.render(scene,camera);
 }
 animate();
 
+// === リサイズ ===
 window.addEventListener("resize",()=>{
   camera.aspect=window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
