@@ -30,23 +30,19 @@ renderer.setClearColor(0xeeeeee, 1);
 document.body.appendChild(renderer.domElement);
 
 // === 光球テクスチャ ===
-function createGlowTexture(size = 1024) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  const r = size / 2;
-
-  const gradient = ctx.createRadialGradient(r, r, r*0.05, r, r, r);
-  gradient.addColorStop(0.0, "rgba(255,255,255,1.0)");
-  gradient.addColorStop(0.2, "rgba(220,240,255,0.7)");
-  gradient.addColorStop(0.5, "rgba(180,200,255,0.35)");
-  gradient.addColorStop(0.8, "rgba(150,180,255,0.15)");
-  gradient.addColorStop(1.0, "rgba(0,0,0,0)");
-
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, size, size);
-
-  return new THREE.CanvasTexture(canvas);
+function createGlowTexture(size=512){
+  const cvs = document.createElement("canvas");
+  cvs.width = cvs.height = size;
+  const ctx = cvs.getContext("2d");
+  const r = size/2;
+  const g = ctx.createRadialGradient(r,r,r*0.05, r,r,r);
+  g.addColorStop(0.0,"rgba(255,255,255,1)");
+  g.addColorStop(0.3,"rgba(220,240,255,0.6)");
+  g.addColorStop(0.6,"rgba(150,180,255,0.3)");
+  g.addColorStop(1.0,"rgba(0,0,0,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,size,size);
+  return new THREE.CanvasTexture(cvs);
 }
 
 // === 光球本体 ===
