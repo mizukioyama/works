@@ -95,7 +95,7 @@ function createSolidRing(radius, color) {
 
   const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
   mask.addColorStop(0.0, "rgba(0,0,0,0)");
-  mask.addColorStop(0.5, "rgba(0,0,0,0.7)");
+  mask.addColorStop(0.5, "rgba(0,0,0,0.3)");
   mask.addColorStop(1.0, "rgba(0,0,0,0)");
   ctx.globalCompositeOperation = "destination-in";
   ctx.fillStyle = mask;
@@ -137,7 +137,7 @@ function createDynamicRing(radius) {
 
     const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
     mask.addColorStop(0.0, "rgba(0,0,0,0)");
-    mask.addColorStop(0.5, "rgba(0,0,0,0.3)");
+    mask.addColorStop(0.5, "rgba(0,0,0,0.7)");
     mask.addColorStop(1.0, "rgba(0,0,0,0)");
     ctx.globalCompositeOperation = "destination-in";
     ctx.fillStyle = mask;
