@@ -80,39 +80,42 @@ function createCore() {
 const core = createCore();
 scene.add(core);
 
-// === 単色リング作成 ===
+// === 単色リング作成（修正版：淡い境界のリング） ===
 function createSolidRing(radius, color) {
   const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 512;
+  canvas.width = canvas.height = 1024;
   const ctx = canvas.getContext("2d");
   const r = canvas.width / 2;
 
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(r, r, r, 0, Math.PI * 2);
-  ctx.fill();
+  // 背景を透明にクリア
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // マスクをより淡く
-  const mask = ctx.createRadialGradient(r, r, r*0.5, r, r, r*0.95);
-  mask.addColorStop(0.0, "rgba(0,0,0,0)");
-  mask.addColorStop(0.6, "rgba(0,0,0,0.6)");
-  mask.addColorStop(1.0, "rgba(0,0,0,0)");
-  ctx.globalCompositeOperation = "destination-in";
-  ctx.fillStyle = mask;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+  // グラデーションでリング状を作成
+  const grad = ctx.createRadialGradient(r, r, r*0.6, r, r, r*0.95);
+  grad.addColorStop(0.0, "rgba(0,0,0,0)");
+  grad.addColorStop(0.3, color.replace("hsla", "rgba").replace("0.25", "0.15"));
+  grad.addColorStop(0.5, color.replace("hsla", "rgba").replace("0.25", "0.35"));
+  grad.addColorStop(0.8, color.replace("hsla", "rgba").replace("0.25", "0.15"));
+  grad.addColorStop(1.0, "rgba(0,0,0,0)");
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(r, r, r, 0, Math.PI*2);
+  ctx.fill();
 
   const texture = new THREE.CanvasTexture(canvas);
   const geo = new THREE.PlaneGeometry(radius*2, radius*2);
   const mat = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.8,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
   });
   return new THREE.Mesh(geo, mat);
 }
+
 
 // === 時計リング作成 ===
 function createDynamicRing(radius) {
