@@ -80,22 +80,21 @@ function createCore() {
 const core = createCore();
 scene.add(core);
 
-// === 単色リング作成（修正版：淡い境界のリング） ===
+// === 単色リング作成（画像寄せ：透明感ある幻想的リング） ===
 function createSolidRing(radius, color) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 1024;
   const ctx = canvas.getContext("2d");
   const r = canvas.width / 2;
 
-  // 背景を透明にクリア
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // グラデーションでリング状を作成
-  const grad = ctx.createRadialGradient(r, r, r*0.6, r, r, r*0.95);
+  // グラデーションで淡く色づいたリングを描画
+  const grad = ctx.createRadialGradient(r, r, r*0.55, r, r, r*0.95);
   grad.addColorStop(0.0, "rgba(0,0,0,0)");
-  grad.addColorStop(0.3, color.replace("hsla", "rgba").replace("0.25", "0.15"));
-  grad.addColorStop(0.5, color.replace("hsla", "rgba").replace("0.25", "0.35"));
-  grad.addColorStop(0.8, color.replace("hsla", "rgba").replace("0.25", "0.15"));
+  grad.addColorStop(0.25, color.replace("0.25", "0.15"));
+  grad.addColorStop(0.5, color.replace("0.25", "0.4")); // 少し強め
+  grad.addColorStop(0.75, color.replace("0.25", "0.2"));
   grad.addColorStop(1.0, "rgba(0,0,0,0)");
 
   ctx.fillStyle = grad;
@@ -108,7 +107,7 @@ function createSolidRing(radius, color) {
   const mat = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
-    opacity: 0.8,
+    opacity: 0.7, // 濃さを調整
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
