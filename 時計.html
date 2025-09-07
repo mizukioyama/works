@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>幻想的な虹色リング</title>
   <script type="importmap">
   {
@@ -10,86 +10,140 @@
       "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
       "OrbitControls": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/controls/OrbitControls.js"
     }
-  }
   </script>
+  <style>
+    body { margin: 0; background: #e3e3e3; }
+    canvas { display: block; }
+  </style>
 </head>
-<body style="margin:0; background:#e5e5e5;">
-<canvas id="canvas"></canvas>
+<body>
 <script type="module">
-import * as THREE from "three";
-import { OrbitControls } from "OrbitControls";
+import * as THREE from 'three';
+import { OrbitControls } from 'OrbitControls';
 
-const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("canvas"), antialias:true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-
+// シーン & カメラ
 const scene = new THREE.Scene();
-const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
-camera.position.z = 1;
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
+camera.position.set(0, 0, 6);
 
-const uniforms = {
-  u_time: { value: 0.0 },
-  u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
-};
-
-const material = new THREE.ShaderMaterial({
-  uniforms: uniforms,
-  transparent: true,
-  fragmentShader: `
-    precision highp float;
-    uniform float u_time;
-    uniform vec2 u_resolution;
-
-    void main() {
-      vec2 uv = (gl_FragCoord.xy / u_resolution) * 2.0 - 1.0;
-      float r = length(uv);
-
-      // ゆらぎを加える
-      float wobble = 0.03 * sin(u_time*0.8 + uv.x*5.0) * cos(u_time*0.6 + uv.y*5.0);
-      r += wobble;
-
-      // 複数のリングを作る
-      float ring1 = smoothstep(0.45, 0.47, r) - smoothstep(0.47, 0.50, r);
-      float ring2 = smoothstep(0.60, 0.62, r) - smoothstep(0.62, 0.65, r);
-      float ring3 = smoothstep(0.75, 0.77, r) - smoothstep(0.77, 0.80, r);
-
-      // 色合い（虹色グラデーション）
-      vec3 col = vec3(1.0);
-      float hue = atan(uv.y, uv.x) / 6.2831 + 0.5;
-      vec3 rainbow = vec3(
-        0.5 + 0.5*sin(6.2831*hue),
-        0.5 + 0.5*sin(6.2831*hue + 2.094),
-        0.5 + 0.5*sin(6.2831*hue + 4.188)
-      );
-
-      // 各リングの強さ
-      col += rainbow * ring1 * 0.8;
-      col += rainbow * ring2 * 0.6;
-      col += rainbow * ring3 * 0.4;
-
-      // 中央に白い光
-      float centerGlow = smoothstep(0.4, 0.0, r);
-      col += vec3(1.0,1.0,1.0) * centerGlow * 1.5;
-
-      gl_FragColor = vec4(col, 1.0);
-    }
-  `
-});
-
-const plane = new THREE.Mesh(new THREE.PlaneGeometry(2,2), material);
-scene.add(plane);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
 
-function animate(t) {
-  uniforms.u_time.value = t * 0.001;
-  renderer.render(scene, camera);
+// シェーダー（虹色のリング + smoothstepで境界を淡く）
+const ringShader = {
+  uniforms: {
+    u_time: { value: 0.0 },
+    u_radius: { value: 1.0 },
+    u_thickness: { value: 0.2 },
+    u_colorIntensity: { value: 1.0 }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv * 2.0 - 1.0; // -1〜1に正規化
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    precision mediump float;
+    varying vec2 vUv;
+    uniform float u_time;
+    uniform float u_radius;
+    uniform float u_thickness;
+    uniform float u_colorIntensity;
+
+    void main() {
+      float r = length(vUv);
+      float ring = smoothstep(u_radius, u_radius - u_thickness, r) *
+                   (1.0 - smoothstep(u_radius + u_thickness, u_radius, r));
+
+      // 虹色を生成（時間でゆらぎあり）
+      float angle = atan(vUv.y, vUv.x) + u_time * 0.2;
+      vec3 color = vec3(
+        0.5 + 0.5 * sin(angle * 3.0 + 0.0),
+        0.5 + 0.5 * sin(angle * 3.0 + 2.0),
+        0.5 + 0.5 * sin(angle * 3.0 + 4.0)
+      );
+
+      // 境界を淡くぼかす
+      float alpha = ring * 0.8;
+
+      gl_FragColor = vec4(color * u_colorIntensity, alpha);
+    }
+  `
+};
+
+// 複数リングを追加して幻想的に
+const rings = [];
+const ringSettings = [
+  { radius: 1.2, thickness: 0.15, speed: 0.002 },
+  { radius: 1.6, thickness: 0.15, speed: -0.0015 },
+  { radius: 2.0, thickness: 0.2, speed: 0.001 }
+];
+
+ringSettings.forEach((s, i) => {
+  const material = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.clone(ringShader.uniforms),
+    vertexShader: ringShader.vertexShader,
+    fragmentShader: ringShader.fragmentShader,
+    transparent: true,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  material.uniforms.u_radius.value = s.radius;
+  material.uniforms.u_thickness.value = s.thickness;
+
+  const geo = new THREE.PlaneGeometry(6, 6, 1, 1);
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.rotation.z = i * 0.5;
+  mesh.userData = { speed: s.speed, mat: material };
+  scene.add(mesh);
+  rings.push(mesh);
+});
+
+// 中央の光の玉
+const sphere = new THREE.Mesh(
+  new THREE.SphereGeometry(0.8, 64, 64),
+  new THREE.MeshPhongMaterial({
+    color: 0xffffff,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.9,
+    transparent: true,
+    opacity: 0.95
+  })
+);
+scene.add(sphere);
+
+// ライト
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const pointLight = new THREE.PointLight(0xffffff, 1.2, 50);
+pointLight.position.set(5, 5, 5);
+scene.add(pointLight);
+
+// アニメーション
+function animate() {
   requestAnimationFrame(animate);
+
+  rings.forEach((ring, i) => {
+    ring.rotation.z += ring.userData.speed;
+    ring.userData.mat.uniforms.u_time.value = performance.now() * 0.001;
+  });
+
+  controls.update();
+  renderer.render(scene, camera);
 }
-animate(0);
+animate();
 
 window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
 });
 </script>
 </body>
