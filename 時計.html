@@ -8,8 +8,9 @@
   {
     "imports": {
       "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
-      "OrbitControls": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/controls/OrbitControls.js"
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
     }
+  }
   </script>
   <style>
     body { margin: 0; background: #e3e3e3; }
@@ -19,7 +20,7 @@
 <body>
 <script type="module">
 import * as THREE from 'three';
-import { OrbitControls } from 'OrbitControls';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // シーン & カメラ
 const scene = new THREE.Scene();
@@ -130,7 +131,7 @@ scene.add(pointLight);
 function animate() {
   requestAnimationFrame(animate);
 
-  rings.forEach((ring, i) => {
+  rings.forEach((ring) => {
     ring.rotation.z += ring.userData.speed;
     ring.userData.mat.uniforms.u_time.value = performance.now() * 0.001;
   });
