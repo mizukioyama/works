@@ -29,91 +29,36 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x111111, 1);
 document.body.appendChild(renderer.domElement);
 
-// === 光のオーラ用テクスチャ ===
-function createGlowTexture(size = 1024) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  const r = size / 2;
+// === 中心の光球 ===
+function createCoreSphere() {
+  const group = new THREE.Group();
 
-  const gradient = ctx.createRadialGradient(r, r, r*0.05, r, r, r);
-  gradient.addColorStop(0.0, "rgba(255,255,255,1.0)");
-  gradient.addColorStop(0.2, "rgba(220,240,255,0.7)");
-  gradient.addColorStop(0.5, "rgba(180,200,255,0.35)");
-  gradient.addColorStop(0.8, "rgba(150,180,255,0.15)");
-  gradient.addColorStop(1.0, "rgba(0,0,0,0)");
-
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, size, size);
-
-  return new THREE.CanvasTexture(canvas);
-}
-
-// === 液体のように動くコア ===
-function createLiquidCore() {
-  const uniforms = {
-    time: { value: 0 },
-    color: { value: new THREE.Color(0xffffff) }
-  };
-
-  const vertexShader = `
-    uniform float time;
-    varying vec3 vNormal;
-
-    // 擬似ノイズ関数
-    float noise(vec3 p) {
-      return fract(sin(dot(p, vec3(12.9898,78.233,45.164))) * 43758.5453);
-    }
-
-    void main() {
-      vNormal = normal;
-      float n = noise(normal + time*0.5);
-      float displacement = 0.25 * sin(time*2.0 + n*6.2831);
-      vec3 newPos = position + normal * displacement;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(newPos, 1.0);
-    }
-  `;
-
-  const fragmentShader = `
-    uniform vec3 color;
-    uniform float time;
-    varying vec3 vNormal;
-
-    void main() {
-      float intensity = 0.6 + 0.4 * sin(time*2.0 + vNormal.x*5.0);
-      gl_FragColor = vec4(color * intensity, 1.0);
-    }
-  `;
-
-  const geo = new THREE.SphereGeometry(1.2, 128, 128);
-  const mat = new THREE.ShaderMaterial({
-    uniforms,
-    vertexShader,
-    fragmentShader,
+  // 中心の白い球体
+  const coreGeo = new THREE.SphereGeometry(1.2, 64, 64);
+  const coreMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
     transparent: true,
+    opacity: 0.9,
     blending: THREE.AdditiveBlending
   });
+  const core = new THREE.Mesh(coreGeo, coreMat);
+  group.add(core);
 
-  const core = new THREE.Mesh(geo, mat);
+  // 発光オーラ（大きめの半透明球体）
+  const auraGeo = new THREE.SphereGeometry(2.2, 64, 64);
+  const auraMat = new THREE.MeshBasicMaterial({
+    color: 0x99ccff,
+    transparent: true,
+    opacity: 0.25,
+    blending: THREE.AdditiveBlending
+  });
+  const aura = new THREE.Mesh(auraGeo, auraMat);
+  group.add(aura);
 
-  return { core, uniforms };
+  return group;
 }
-
-const { core, uniforms: coreUniforms } = createLiquidCore();
+const core = createCoreSphere();
 scene.add(core);
-
-// === オーラ ===
-const auraGeo = new THREE.PlaneGeometry(4.5, 4.5);
-const auraMat = new THREE.MeshBasicMaterial({
-  map: createGlowTexture(),
-  transparent: true,
-  opacity: 0.4,
-  blending: THREE.AdditiveBlending,
-  side: THREE.DoubleSide,
-  depthWrite: false
-});
-const aura = new THREE.Mesh(auraGeo, auraMat);
-scene.add(aura);
 
 // === 単色リング作成 ===
 function createSolidRing(radius, color) {
@@ -142,13 +87,12 @@ function createSolidRing(radius, color) {
     transparent: true,
     opacity: 0.6,
     blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: true
+    side: THREE.DoubleSide
   });
   return new THREE.Mesh(geo, mat);
 }
 
-// === 時計リング（色変化付き） ===
+// === 時計リング（動的な色変化あり） ===
 function createDynamicRing(radius) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 1024;
@@ -187,8 +131,7 @@ function createDynamicRing(radius) {
     transparent: true,
     opacity: 0.5,
     blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: true
+    side: THREE.DoubleSide
   });
   const mesh = new THREE.Mesh(geo, mat);
   return { mesh, draw };
@@ -216,11 +159,12 @@ function animate() {
   const t = clock.getElapsedTime();
   const yearsPassed = Math.floor(elapsedMs / (1000*60*60*24*365));
 
-  // 液体コアの時間更新
-  coreUniforms.time.value = t;
+  // コアの回転
+  core.rotation.y = t * 0.2;
 
-  // Aura回転
-  aura.rotation.z = t * 0.1;
+  // 球体を呼吸のように膨らませる
+  const s = 1 + 0.05 * Math.sin(t*2.0);
+  core.scale.set(s, s, s);
 
   // 時計の時間ベース回転
   const sec = now.getSeconds() + now.getMilliseconds()/1000;
@@ -232,9 +176,9 @@ function animate() {
   hourRing.mesh.rotation.z = -(hour/12)*Math.PI*2 + t*0.1;
 
   // ゆらゆらスケール変化
-  secRing.mesh.scale.set(1.05+0.05*Math.sin(t*2),1.05+0.05*Math.cos(t*2),1);
-  minRing.mesh.scale.set(1.1+0.07*Math.sin(t*1.5),1.1+0.07*Math.cos(t*1.5),1);
-  hourRing.mesh.scale.set(1.15+0.04*Math.sin(t),1.15+0.04*Math.cos(t),1);
+  secRing.mesh.scale.set(1.05+0.05*Math.sin(t*2), 1.05+0.05*Math.cos(t*2), 1);
+  minRing.mesh.scale.set(1.1+0.07*Math.sin(t*1.5), 1.1+0.07*Math.cos(t*1.5), 1);
+  hourRing.mesh.scale.set(1.15+0.04*Math.sin(t), 1.15+0.04*Math.cos(t), 1);
 
   // 色相変化
   const hueShift = (elapsedMs/100) % 360;

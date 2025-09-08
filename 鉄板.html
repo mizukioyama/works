@@ -16,10 +16,10 @@
   </style>
 </head>
 <body>
-  <!-- three.js CDN r148 -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.148.0/build/three.min.js"></script>
-  <!-- OrbitControls CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.148.0/examples/js/controls/OrbitControls.min.js"></script>
+  <!-- three.js r138 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/build/three.min.js"></script>
+  <!-- OrbitControls r138 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/examples/js/controls/OrbitControls.js"></script>
 
   <script>
     // ===== シーンの作成 =====
@@ -42,39 +42,14 @@
     document.body.appendChild(renderer.domElement);
 
     // ===== 環境光 =====
-    const ambient = new THREE.AmbientLight(0xffffff, 0.3);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.4);
     scene.add(ambient);
 
     // ===== スポットライト =====
-    const light = new THREE.SpotLight(0xffffff, 1);
+    const light = new THREE.SpotLight(0xffffff, 1.2);
     light.position.set(5, 5, 5);
     light.castShadow = true;
     scene.add(light);
-
-    // ===== 鉄板のテクスチャ =====
-    const textureLoader = new THREE.TextureLoader();
-    const metalColor = textureLoader.load("https://threejs.org/examples/textures/metal/BrushedMetal_albedo.png");
-    const metalNormal = textureLoader.load("https://threejs.org/examples/textures/metal/BrushedMetal_normal.png");
-    const metalRoughness = textureLoader.load("https://threejs.org/examples/textures/metal/BrushedMetal_roughness.png");
-
-    // ===== PBRマテリアルで鉄板を再現 =====
-    const metalMaterial = new THREE.MeshStandardMaterial({
-      map: metalColor,
-      normalMap: metalNormal,
-      roughnessMap: metalRoughness,
-      metalness: 1.0,
-      roughness: 0.2,
-      envMapIntensity: 1.5,
-    });
-
-    // ===== 鉄板オブジェクト =====
-    const plate = new THREE.Mesh(
-      new THREE.BoxGeometry(3, 0.05, 3),
-      metalMaterial
-    );
-    plate.castShadow = true;
-    plate.receiveShadow = true;
-    scene.add(plate);
 
     // ===== 環境マップ（反射用） =====
     const cubeTextureLoader = new THREE.CubeTextureLoader();
@@ -87,7 +62,32 @@
       "https://threejs.org/examples/textures/cube/Bridge2/negz.jpg",
     ]);
     scene.background = envMap;
-    metalMaterial.envMap = envMap;
+
+    // ===== 鉄板テクスチャ =====
+    const textureLoader = new THREE.TextureLoader();
+    const metalColor = textureLoader.load("https://threejs.org/examples/textures/metal/BrushedMetal_albedo.png");
+    const metalNormal = textureLoader.load("https://threejs.org/examples/textures/metal/BrushedMetal_normal.png");
+    const metalRoughness = textureLoader.load("https://threejs.org/examples/textures/metal/BrushedMetal_roughness.png");
+
+    // ===== PBRマテリアルで鉄板を再現 =====
+    const metalMaterial = new THREE.MeshStandardMaterial({
+      map: metalColor,
+      normalMap: metalNormal,
+      roughnessMap: metalRoughness,
+      metalness: 1.0,
+      roughness: 0.15,
+      envMap: envMap,
+      envMapIntensity: 1.2,
+    });
+
+    // ===== 鉄板オブジェクト =====
+    const plate = new THREE.Mesh(
+      new THREE.BoxGeometry(3, 0.05, 3),
+      metalMaterial
+    );
+    plate.castShadow = true;
+    plate.receiveShadow = true;
+    scene.add(plate);
 
     // ===== カメラ操作 =====
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
