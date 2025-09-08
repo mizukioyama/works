@@ -3,35 +3,39 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>映画クオリティ：リアル鉄板（修正版）</title>
+  <title>映画クオリティ：リアル鉄板</title>
   <style>
     html,body { height:100%; margin:0; background:#050507; overflow:hidden; }
     #canvas-container { width:100%; height:100%; }
-    .ui { position:fixed; left:12px; top:12px; color:#eee; font-family:system-ui, -apple-system, "Segoe UI", Roboto, Meiryo; background: rgba(0,0,0,0.25); padding:8px 12px; border-radius:8px; font-size:13px; z-index:5; }
+    .ui {
+      position:fixed; left:12px; top:12px;
+      color:#eee; font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", Meiryo;
+      background: rgba(0,0,0,0.25); padding:8px 12px; border-radius:8px;
+      font-size:13px;
+    }
   </style>
 </head>
 <body>
   <div class="ui">ドラッグ：回転 / ホイール：ズーム</div>
   <div id="canvas-container"></div>
 
-  <!-- three.js r138（安定CDN） -->
+  <!-- three.js r138 安定版 -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/build/three.min.js"></script>
 
-  <!-- Controls（非モジュール版 r138） -->
+  <!-- OrbitControls -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/examples/js/controls/OrbitControls.js"></script>
 
-  <!-- Postprocessing 必要ファイル（順序重要） -->
+  <!-- Postprocessing 必要な全スクリプト -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/examples/js/postprocessing/EffectComposer.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/examples/js/postprocessing/RenderPass.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/examples/js/postprocessing/ShaderPass.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/examples/js/shaders/CopyShader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 
   <script>
   window.addEventListener('load', function () {
     const container = document.getElementById('canvas-container');
 
-    // --- 基本セットアップ ---
+    // シーン・カメラ・レンダラー
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
     camera.position.set(0, 1.2, 2.8);
@@ -45,13 +49,23 @@
     renderer.physicallyCorrectLights = true;
     container.appendChild(renderer.domElement);
 
-    // --- ライティング（シネマティック） ---
-    const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(4, 6, 3); scene.add(key);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.6); fill.position.set(-3, 2, 1); scene.add(fill);
-    const rim = new THREE.DirectionalLight(0xffffff, 0.45); rim.position.set(0, 3, -5); scene.add(rim);
-    const ambient = new THREE.AmbientLight(0xffffff, 0.18); scene.add(ambient);
+    // ライティング
+    const key = new THREE.DirectionalLight(0xffffff, 1.6);
+    key.position.set(4, 6, 3);
+    scene.add(key);
 
-    // --- 環境反射（キューブマップ：Bridge2） ---
+    const fill = new THREE.DirectionalLight(0xffffff, 0.6);
+    fill.position.set(-3, 2, 1);
+    scene.add(fill);
+
+    const rim = new THREE.DirectionalLight(0xffffff, 0.45);
+    rim.position.set(0, 3, -5);
+    scene.add(rim);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.18);
+    scene.add(ambient);
+
+    // 環境反射
     const cubeLoader = new THREE.CubeTextureLoader();
     const envMap = cubeLoader.load([
       "https://threejs.org/examples/textures/cube/Bridge2/posx.jpg",
@@ -63,38 +77,36 @@
     ]);
     scene.background = new THREE.Color(0x07070a);
 
-    // --- テクスチャ読み込み（高品質メタルテクスチャ） ---
-    const loader = new THREE.TextureLoader();
-    const texBase   = loader.load("https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/metal/Metal_plate_001_basecolor.jpg");
-    const texNormal = loader.load("https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/metal/Metal_plate_001_normal.jpg");
-    const texRough  = loader.load("https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/metal/Metal_plate_001_roughness.jpg");
-    const texMetal  = loader.load("https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/metal/Metal_plate_001_metallic.jpg");
-    const texAO     = loader.load("https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/metal/Metal_plate_001_ambientOcclusion.jpg");
+    // PBRテクスチャ
+    const texLoader = new THREE.TextureLoader();
+    const texBase = texLoader.load("https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/metal/Metal_plate_001_basecolor.jpg");
+    const texNormal = texLoader.load("https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/metal/Metal_plate_001_normal.jpg");
+    const texRough = texLoader.load("https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/metal/Metal_plate_001_roughness.jpg");
+    const texMetal = texLoader.load("https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/metal/Metal_plate_001_metallic.jpg");
+    const texAO = texLoader.load("https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/metal/Metal_plate_001_ambientOcclusion.jpg");
 
-    // テクスチャ設定（タイル強調）
     [texBase, texNormal, texRough, texMetal, texAO].forEach(t => {
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
       t.repeat.set(2.5, 2.5);
     });
 
-    // --- PBRマテリアル（映画クオリティ） ---
+    const normalScale = new THREE.Vector2(1.0, 1.0);
+
     const metalMaterial = new THREE.MeshStandardMaterial({
       map: texBase,
       normalMap: texNormal,
-      normalScale: new THREE.Vector2(1.0, 1.0),
+      normalScale: normalScale,
       roughnessMap: texRough,
       metalnessMap: texMetal,
       aoMap: texAO,
       metalness: 1.0,
-      roughness: 0.22,
+      roughness: 0.25,
       envMap: envMap,
       envMapIntensity: 1.6,
     });
 
-    // --- ジオメトリ（高分割でノーマルを生かす） ---
-    const plateGeo = new THREE.BoxGeometry(2.6, 0.06, 1.6, 128, 4, 128);
-    // 三角分割でuv2を用意（aoMap用）
-    if (!plateGeo.attributes.uv2) plateGeo.setAttribute('uv2', plateGeo.attributes.uv.clone());
+    const plateGeo = new THREE.BoxGeometry(2.6, 0.06, 1.6, 256, 1, 256);
+    plateGeo.attributes.uv2 = plateGeo.attributes.uv;
 
     const plate = new THREE.Mesh(plateGeo, metalMaterial);
     plate.position.y = 0.15;
@@ -102,16 +114,14 @@
     plate.receiveShadow = true;
     scene.add(plate);
 
-    // --- 周辺小物（反射に映るオブジェクト） ---
-    const sMat = new THREE.MeshStandardMaterial({ color:0x7da7ff, metalness:0.6, roughness:0.25, envMap:envMap });
-    const s1 = new THREE.Mesh(new THREE.SphereGeometry(0.08, 32, 32), sMat); s1.position.set(-0.9,0.2,0.2); scene.add(s1);
+    const smallGeo = new THREE.SphereGeometry(0.08, 32, 32);
+    const smallMat = new THREE.MeshStandardMaterial({ color:0x7da7ff, metalness:0.6, roughness:0.25, envMap:envMap });
+    const s1 = new THREE.Mesh(smallGeo, smallMat); s1.position.set(-0.9, 0.2, 0.2); scene.add(s1);
     const s2 = new THREE.Mesh(new THREE.BoxGeometry(0.12,0.12,0.12), new THREE.MeshStandardMaterial({color:0xff9f9f, metalness:0.2, roughness:0.45, envMap:envMap})); s2.position.set(0.9,0.17,-0.15); scene.add(s2);
 
-    // 床
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(10,10), new THREE.MeshStandardMaterial({color:0x0c0c0f, roughness:0.95}));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(10,10), new THREE.MeshStandardMaterial({color:0x0c0c0f, roughness:0.9}));
     floor.rotation.x = -Math.PI/2; floor.position.y = 0; scene.add(floor);
 
-    // --- Controls ---
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 0.15, 0);
     controls.enableDamping = true;
@@ -119,45 +129,34 @@
     controls.minDistance = 0.8;
     controls.maxDistance = 6;
 
-    // --- Postprocessing (composer + bloom) ---
+    // Bloom エフェクト
     const composer = new THREE.EffectComposer(renderer);
     const renderPass = new THREE.RenderPass(scene, camera);
     composer.addPass(renderPass);
 
-    const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.9, 0.4, 0.12);
-    bloomPass.threshold = 0.12;
-    bloomPass.strength = 0.9;
-    bloomPass.radius = 0.4;
+    const bloomPass = new THREE.UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.9, // strength
+      0.4, // radius
+      0.12 // threshold
+    );
     composer.addPass(bloomPass);
 
-    // --- Render loop ---
-    let t = 0;
     function animate() {
       requestAnimationFrame(animate);
-      t += 0.008;
-      s1.position.y = 0.2 + Math.sin(t * 1.3) * 0.02;
-      s2.rotation.y += 0.005;
       controls.update();
       composer.render();
     }
     animate();
 
-    // --- Resize handling ---
-    window.addEventListener('resize', () => {
+    window.addEventListener('resize', function () {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
-
       renderer.setSize(window.innerWidth, window.innerHeight);
       composer.setSize(window.innerWidth, window.innerHeight);
     });
 
-    // --- 簡単なロード確認ログ (デバッグ) ---
-    [texBase, texNormal, texRough, texMetal, texAO].forEach((tx,i)=>{
-      if(tx && tx.image) console.log(`texture[${i}] loaded`);
-      else console.warn(`texture[${i}] not loaded (will still try)`);
-    });
-
-  }); // window.load end
+  });
   </script>
 </body>
 </html>
