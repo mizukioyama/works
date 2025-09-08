@@ -1,156 +1,143 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>超リアル金属板</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>三.js 金属板 — importmap 対応版</title>
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      background-color: #08090b;
-      overflow: hidden;
-    }
-    #app {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-    .ui {
-      position: fixed;
-      left: 12px;
-      bottom: 12px;
-      color: #e6edf3;
-      font-size: 13px;
-      font-family: sans-serif;
-    }
-    .badge {
-      display: inline-block;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.04);
-      margin-right: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.04);
-    }
+    html,body{height:100%;margin:0;background:#08090b}
+    #app{width:100%;height:100%}
+    .ui{position:fixed;left:12px;bottom:12px;color:#e6edf3;font-size:13px}
+    .badge{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.04);margin-right:8px;border:1px solid rgba(255,255,255,0.04)}
   </style>
 </head>
 <body>
   <div id="app"></div>
-  <div class="ui">
-    <span class="badge">ドラッグ：回転</span>
-    <span class="badge">ホイール：ズーム</span>
-    <span class="badge">Shift+ドラッグ：パン</span>
-  </div>
+  <div class="ui"><span class="badge">ドラッグ：回転</span><span class="badge">ホイール：ズーム</span></div>
 
-  <!-- ES Module 形式で three.js を読み込み -->
+  <!-- es-module-shims（importmap をポリフィルするため） -->
+  <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.8.1/dist/es-module-shims.min.js"></script>
+
+  <!-- import map：'three' と 'three/' プレフィックスを CDN に割り当て -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js",
+      "three/": "https://cdn.jsdelivr.net/npm/three@0.152.2/"
+    }
+  }
+  </script>
+
+  <!-- main module -->
   <script type="module">
-    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js";
-    import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/controls/OrbitControls.js";
-    import { RGBELoader } from "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/RGBELoader.js";
-    import { FlakesTexture } from "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/textures/FlakesTexture.js";
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+  import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+  import { FlakesTexture } from 'three/examples/jsm/textures/FlakesTexture.js';
+  import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
-    // ----- 基本セットアップ -----
-    const container = document.getElementById("app");
-    const scene = new THREE.Scene();
+  // --- 基本セットアップ ---
+  const container = document.getElementById('app');
+  const scene = new THREE.Scene();
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
-    container.appendChild(renderer.domElement);
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  // もしエラー出るなら下行を renderer.outputEncoding = THREE.sRGBEncoding に変更してください
+  if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
+  else renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  container.appendChild(renderer.domElement);
 
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(2.2, 1.4, 3.5);
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera.position.set(2.2, 1.4, 3.5);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
-    controls.target.set(0, 0.5, 0);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.target.set(0, 0.5, 0);
 
-    // ----- 環境光（HDRI） -----
-    const pmremGenerator = new THREE.PMREMGenerator(renderer);
-    pmremGenerator.compileEquirectangularShader();
+  // --- HDRI 読み込み（フォールバックあり） ---
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  pmrem.compileEquirectangularShader();
+  const hdrUrl = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r152/examples/textures/equirectangular/royal_esplanade_1k.hdr';
 
-    const hdrURL =
-      "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r152/examples/textures/equirectangular/royal_esplanade_1k.hdr";
-
-    new RGBELoader()
-      .setDataType(THREE.UnsignedByteType)
-      .load(hdrURL, function (texture) {
-        const envMap = pmremGenerator.fromEquirectangular(texture).texture;
-        scene.environment = envMap;
-        scene.background = envMap;
-        texture.dispose();
-        pmremGenerator.dispose();
-      });
-
-    // ----- 金属板 -----
-    const flakes = new FlakesTexture();
-    const normalMap = new THREE.CanvasTexture(flakes);
-    normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
-    normalMap.repeat.set(6, 2);
-
-    const plateGeo = new THREE.BoxGeometry(1.6, 0.018, 1.0);
-    const plateMat = new THREE.MeshPhysicalMaterial({
-      color: 0x9aa0a6,
-      metalness: 1.0,
-      roughness: 0.12,
-      envMapIntensity: 1.4,
-      reflectivity: 1.0,
-      clearcoat: 0.8,
-      clearcoatRoughness: 0.06,
-      normalMap: normalMap,
-      normalScale: new THREE.Vector2(0.6, 0.6),
-    });
-
-    const plate = new THREE.Mesh(plateGeo, plateMat);
-    plate.position.set(0, 0.6, 0);
-    scene.add(plate);
-
-    // ----- 床 -----
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(20, 20),
-      new THREE.MeshStandardMaterial({ color: 0x0e1114, roughness: 0.95, metalness: 0 })
+  new RGBELoader()
+    .setDataType(THREE.UnsignedByteType)
+    .load(hdrUrl,
+      (tex) => {
+        const env = pmrem.fromEquirectangular(tex).texture;
+        scene.environment = env;
+        scene.background = env;
+        tex.dispose();
+        pmrem.dispose();
+      },
+      undefined,
+      () => {
+        // 読み込み失敗時は簡易ライトを置く
+        scene.background = new THREE.Color(0x0b0d12);
+        scene.add(new THREE.DirectionalLight(0xffffff, 1.0));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+      }
     );
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = 0;
-    scene.add(floor);
 
-    // ----- カメラで反射を更新 -----
-    const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(1024, {
-      format: THREE.RGBAFormat,
-      generateMipmaps: true,
-      minFilter: THREE.LinearMipmapLinearFilter,
-    });
-    const cubeCamera = new THREE.CubeCamera(0.01, 50, cubeRenderTarget);
-    cubeCamera.position.copy(plate.position);
-    scene.add(cubeCamera);
+  // --- 金属板 ---
+  const flakes = new FlakesTexture();
+  const normalMap = new THREE.CanvasTexture(flakes);
+  normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
+  normalMap.repeat.set(6,2);
+  normalMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
-    function updateReflection() {
-      plate.visible = false;
-      cubeCamera.update(renderer, scene);
-      plate.visible = true;
-      plate.material.envMap = cubeRenderTarget.texture;
-      plate.material.needsUpdate = true;
-    }
+  const plateGeo = new RoundedBoxGeometry(1.6, 0.018, 1.0, 8, 0.04);
+  const plateMat = new THREE.MeshPhysicalMaterial({
+    color: 0x9aa0a6,
+    metalness: 1.0,
+    roughness: 0.12,
+    envMapIntensity: 1.4,
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.06,
+    normalMap: normalMap,
+    normalScale: new THREE.Vector2(0.6, 0.6)
+  });
+  const plate = new THREE.Mesh(plateGeo, plateMat);
+  plate.position.set(0,0.6,0);
+  scene.add(plate);
 
-    // ----- アニメーション -----
-    function animate() {
-      requestAnimationFrame(animate);
-      controls.update();
-      updateReflection();
-      renderer.render(scene, camera);
-    }
-    animate();
+  // --- 床と小物 ---
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(20,20), new THREE.MeshStandardMaterial({color:0x0e1114, roughness:0.95}));
+  floor.rotation.x = -Math.PI/2; floor.position.y = 0; scene.add(floor);
+  const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.18,64,64), new THREE.MeshPhysicalMaterial({color:0x7fb0ff, metalness:0.6, roughness:0.2}));
+  sphere.position.set(-0.85,0.36,0.28); scene.add(sphere);
 
-    window.addEventListener("resize", () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+  // --- 動的キューブカメラ反射（高解像度） ---
+  const cubeRT = new THREE.WebGLCubeRenderTarget(1024, { format: THREE.RGBAFormat, generateMipmaps:true, minFilter: THREE.LinearMipmapLinearFilter });
+  const cubeCam = new THREE.CubeCamera(0.01, 50, cubeRT);
+  cubeCam.position.copy(plate.position);
+  scene.add(cubeCam);
+
+  function updateReflection(){
+    plate.visible = false;
+    cubeCam.update(renderer, scene);
+    plate.visible = true;
+    plate.material.envMap = cubeRT.texture;
+    plate.material.needsUpdate = true;
+  }
+
+  // --- アニメ ---
+  function animate(){
+    requestAnimationFrame(animate);
+    controls.update();
+    updateReflection();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', ()=>{
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
   </script>
 </body>
 </html>

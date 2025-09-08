@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>幻想的な液体と霧</title>
+  <title>液体のように変形する球体</title>
   <style>
     body { margin: 0; background: black; overflow: hidden; }
     canvas { display: block; }
@@ -11,21 +11,20 @@
 </head>
 <body>
 <script src="https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/controls/OrbitControls.js"></script>
 
 <script>
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
-camera.position.z = 8;
+camera.position.z = 6;
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// ========== 液体の球体 ==========
+// ========== 液体球体のシェーダー ==========
 const uniforms = {
   time: { value: 0.0 },
-  color: { value: new THREE.Color(0x99ccff) } // 幻想的な水色
+  color: { value: new THREE.Color(0x99ccff) }
 };
 
 const liquidShader = {
@@ -34,15 +33,17 @@ const liquidShader = {
     uniform float time;
     varying vec3 vNormal;
 
-    // 簡易ノイズ
-    float rand(vec3 c){
-      return fract(sin(dot(c ,vec3(12.9898,78.233,45.164))) * 43758.5453);
+    // 疑似ノイズ
+    float noise(vec3 p) {
+      return sin(p.x*2.0 + time) * 0.3 +
+             sin(p.y*3.0 + time*0.7) * 0.3 +
+             sin(p.z*4.0 + time*1.3) * 0.3;
     }
 
-    void main(){
+    void main() {
       vNormal = normal;
-      float noise = rand(normal + time * 0.5);
-      float displacement = 0.3 * sin(time + noise * 6.28);
+      // 頂点をnormal方向に変形（中心はそのまま）
+      float displacement = noise(normal + time*0.2) * 0.25;
       vec3 newPosition = position + normal * displacement;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
     }
@@ -51,13 +52,15 @@ const liquidShader = {
     uniform vec3 color;
     uniform float time;
     varying vec3 vNormal;
+
     void main(){
-      float intensity = 0.5 + 0.5 * sin(time + vNormal.x*5.0);
-      gl_FragColor = vec4(color * intensity, 0.9);
+      float intensity = 0.6 + 0.4 * sin(time*2.0 + vNormal.x*5.0);
+      gl_FragColor = vec4(color * intensity, 1.0);
     }
   `
 };
 
+// 球体ジオメトリ
 const sphereGeo = new THREE.SphereGeometry(1.5, 128, 128);
 const sphereMat = new THREE.ShaderMaterial({
   uniforms: uniforms,
@@ -69,40 +72,14 @@ const sphereMat = new THREE.ShaderMaterial({
 const sphere = new THREE.Mesh(sphereGeo, sphereMat);
 scene.add(sphere);
 
-// ========== 霧のようなリング ==========
-const rings = [];
-const colors = [0xff99cc, 0x99ffcc, 0xcc99ff]; // 幻想的な3色
-
-for (let i = 0; i < 6; i++) {
-  const ringGeo = new THREE.RingGeometry(2+i*0.5, 2.2+i*0.5, 128);
-  const ringMat = new THREE.MeshBasicMaterial({
-    color: colors[i % colors.length],
-    transparent: true,
-    opacity: 0.3,
-    side: THREE.DoubleSide
-  });
-  const ring = new THREE.Mesh(ringGeo, ringMat);
-  ring.rotation.x = Math.random() * Math.PI;
-  ring.rotation.y = Math.random() * Math.PI;
-  scene.add(ring);
-  rings.push(ring);
-}
-
 // ========== アニメーション ==========
 function animate(){
   requestAnimationFrame(animate);
-  uniforms.time.value += 0.01;
+  uniforms.time.value += 0.02;
 
-  // 球体をふわふわスケーリング
-  let scale = 1.0 + 0.05 * Math.sin(uniforms.time.value * 2.0);
+  // 球体をふわっと呼吸するように拡縮
+  let scale = 1.0 + 0.03 * Math.sin(uniforms.time.value);
   sphere.scale.set(scale, scale, scale);
-
-  // リングをランダムにフェードさせる（霧っぽさ）
-  rings.forEach((ring, i) => {
-    ring.rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
-    ring.material.opacity = 0.15 + 0.15 * Math.sin(uniforms.time.value * 1.5 + i);
-    ring.scale.setScalar(1.0 + 0.05 * Math.sin(uniforms.time.value*2 + i));
-  });
 
   renderer.render(scene, camera);
 }
