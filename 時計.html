@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>液体のように揺らめく時計リング</title>
+  <title>幻想的な時計リング</title>
   <style>
-    body { margin:0; overflow:hidden; background:#111; }
+    body { margin:0; overflow:hidden; background:#eee; }
     canvas { display:block; }
   </style>
   <script type="importmap">
@@ -26,28 +26,32 @@ camera.position.z = 10;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x111111, 1);
+renderer.setClearColor(0xeeeeee, 1); 
 document.body.appendChild(renderer.domElement);
 
-// === コア（光球） ===
-function createGlowTexture(size = 512) {
+// === 光球テクスチャ ===
+function createGlowTexture(size = 1024) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext("2d");
   const r = size / 2;
+
   const gradient = ctx.createRadialGradient(r, r, r*0.05, r, r, r);
   gradient.addColorStop(0.0, "rgba(255,255,255,1.0)");
-  gradient.addColorStop(0.2, "rgba(220,240,255,0.7)");
-  gradient.addColorStop(0.5, "rgba(180,200,255,0.35)");
-  gradient.addColorStop(0.8, "rgba(150,180,255,0.15)");
+  gradient.addColorStop(0.3, "rgba(220,240,255,0.6)");
+  gradient.addColorStop(0.6, "rgba(180,200,255,0.25)");
   gradient.addColorStop(1.0, "rgba(0,0,0,0)");
+
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, size, size);
+
   return new THREE.CanvasTexture(canvas);
 }
 
+// === 中央光球 ===
 function createCore() {
   const group = new THREE.Group();
+
   const coreGeo = new THREE.PlaneGeometry(2.5, 2.5);
   const coreMat = new THREE.MeshBasicMaterial({
     map: createGlowTexture(),
@@ -57,69 +61,99 @@ function createCore() {
     depthWrite: false
   });
   group.add(new THREE.Mesh(coreGeo, coreMat));
+
+  const auraGeo = new THREE.PlaneGeometry(4.5, 4.5);
+  const auraMat = new THREE.MeshBasicMaterial({
+    map: createGlowTexture(),
+    transparent: true,
+    opacity: 0.4,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  group.add(new THREE.Mesh(auraGeo, auraMat));
+
   return group;
 }
 const core = createCore();
 scene.add(core);
 
-// === シェーダーリング ===
-function createShaderRing(radius) {
-  const geo = new THREE.PlaneGeometry(radius*2, radius*2, 100, 100);
+// === ゆらゆらリング（ShaderMaterial版） ===
+function createWavyRing(radius, color) {
+  const uniforms = {
+    u_time: { value: 0.0 },
+    u_color: { value: new THREE.Color(color) },
+    u_radius: { value: radius }
+  };
+
+  const vertexShader = `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      vec3 pos = position;
+      float theta = atan(pos.y, pos.x);
+      float distortion = 0.05 * sin(theta * 6.0 + u_time*2.0);
+      pos.xy *= (1.0 + distortion);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `;
+
+  const fragmentShader = `
+    uniform vec3 u_color;
+    uniform float u_radius;
+    varying vec2 vUv;
+    void main() {
+      float dist = length(vUv - 0.5);
+      float ring = smoothstep(0.48, 0.5, dist) - smoothstep(0.5, 0.52, dist);
+      gl_FragColor = vec4(u_color, ring * 0.6);
+    }
+  `;
+
+  const geo = new THREE.PlaneGeometry(radius*2, radius*2, 128, 128);
   const mat = new THREE.ShaderMaterial({
-    uniforms: {
-      u_time: { value: 0 },
-      u_color: { value: new THREE.Color(0x66ccff) }, // 薄い幻想的な色
-    },
-    vertexShader: `
-      uniform float u_time;
-      varying vec2 vUv;
-      void main(){
-        vUv = uv;
-        vec3 pos = position;
-        // 頂点をゆらゆら変形
-        pos.x += 0.02 * sin(10.0*uv.y + u_time*2.0);
-        pos.y += 0.02 * cos(10.0*uv.x + u_time*1.5);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos,1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float u_time;
-      uniform vec3 u_color;
-      varying vec2 vUv;
-      void main(){
-        float dist = length(vUv - 0.5);
-        float alpha = smoothstep(0.45, 0.5, dist) * (1.0 - smoothstep(0.5, 0.55, dist));
-        gl_FragColor = vec4(u_color, alpha*0.6);
-      }
-    `,
+    uniforms,
+    vertexShader,
+    fragmentShader,
     transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending
   });
-  return new THREE.Mesh(geo, mat);
+
+  const mesh = new THREE.Mesh(geo, mat);
+  return { mesh, uniforms };
 }
 
-// === 時計リング3つ ===
-const secRing = createShaderRing(1.4);
-const minRing = createShaderRing(1.7);
-const hourRing = createShaderRing(2.0);
-scene.add(secRing, minRing, hourRing);
+// === 時計リング ===
+const secRing = createWavyRing(1.4, "#99ccff");
+const minRing = createWavyRing(1.7, "#cc99ff");
+const hourRing = createWavyRing(2.0, "#ffcc99");
+scene.add(secRing.mesh, minRing.mesh, hourRing.mesh);
+
+// === 時間管理 ===
+const clock = new THREE.Clock();
 
 // === アニメーション ===
-const clock = new THREE.Clock();
-function animate(){
+function animate() {
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
+  const now = new Date();
 
-  core.rotation.z = t*0.1;
+  // 中央の光球を少し拡大
+  core.scale.set(1 + 0.02*Math.sin(t*0.5), 1 + 0.02*Math.cos(t*0.5), 1);
 
-  secRing.material.uniforms.u_time.value = t;
-  minRing.material.uniforms.u_time.value = t*0.7;
-  hourRing.material.uniforms.u_time.value = t*0.4;
+  // 時計の回転
+  const sec = now.getSeconds() + now.getMilliseconds()/1000;
+  const min = now.getMinutes() + sec/60;
+  const hour = (now.getHours()%12) + min/60;
 
-  secRing.rotation.z = -(t*0.5);
-  minRing.rotation.z = (t*0.2);
-  hourRing.rotation.z = -(t*0.1);
+  secRing.mesh.rotation.z = -(sec/60)*Math.PI*2;
+  minRing.mesh.rotation.z = -(min/60)*Math.PI*2;
+  hourRing.mesh.rotation.z = -(hour/12)*Math.PI*2;
+
+  // ゆらゆら揺らぎ
+  secRing.uniforms.u_time.value = t;
+  minRing.uniforms.u_time.value = t*0.8;
+  hourRing.uniforms.u_time.value = t*0.6;
 
   renderer.render(scene, camera);
 }
