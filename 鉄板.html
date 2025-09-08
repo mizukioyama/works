@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>リアル金属板 – three.js（反射＆カメラ反応）</title>
+  <title>リアル金属板 – three.js（HDRI反射＆カメラ反応）</title>
   <style>
     html, body { height: 100%; margin: 0; }
-    body { background: #0b0d12; overflow: hidden; font-family: system-ui, -apple-system, Segoe UI, Roboto, Meiryo, sans-serif; }
+    body { background: #0b0d12; overflow: hidden; }
     #app { position: fixed; inset: 0; }
     .ui {
       position: fixed;
@@ -34,14 +34,13 @@
     <div class="pill">ドラッグ：回転</div>
     <div class="pill">ホイール：ズーム</div>
     <div class="pill">Shift+ドラッグ：パン</div>
-    <div style="margin-top:.4em">カメラを動かすほど<b>反射</b>が変化します（動的反射）。</div>
+    <div style="margin-top:.4em">HDRI環境で<b>リアルな反射</b>を再現しています。</div>
   </div>
 
-  <!-- three.js + 公式アドオンCDNから読み込み -->
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
     import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
-    import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/environments/RoomEnvironment.js";
+    import { RGBELoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/RGBELoader.js";
     import { FlakesTexture } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/textures/FlakesTexture.js";
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/geometries/RoundedBoxGeometry.js";
 
@@ -54,7 +53,7 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
+    renderer.toneMappingExposure = 1.2;
     container.appendChild(renderer.domElement);
 
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -65,11 +64,14 @@
     controls.dampingFactor = 0.05;
     controls.target.set(0, 0.5, 0);
 
-    // ---------- 環境設定 ----------
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    const env = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
-    scene.environment = env;
-    scene.background = new THREE.Color(0x0b0d12);
+    // ---------- HDRI環境マップ ----------
+    new RGBELoader()
+      .setPath("https://rawcdn.githack.com/mrdoob/three.js/dev/examples/textures/equirectangular/")
+      .load("royal_esplanade_1k.hdr", function (texture) {
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        scene.background = texture;
+        scene.environment = texture;
+      });
 
     // ---------- 金属板 ----------
     const flakes = new FlakesTexture();
@@ -81,41 +83,21 @@
     const plateGeo = new RoundedBoxGeometry(1.6, 0.02, 1.0, 8, 0.05);
     const plateMat = new THREE.MeshPhysicalMaterial({
       metalness: 1.0,
-      roughness: 0.2,
-      envMapIntensity: 1.0,
-      reflectivity: 1.0,
+      roughness: 0.15,
       clearcoat: 0.6,
-      clearcoatRoughness: 0.15,
+      clearcoatRoughness: 0.1,
+      envMapIntensity: 1.5,
       normalMap,
-      normalScale: new THREE.Vector2(0.3, 0.3),
+      normalScale: new THREE.Vector2(0.4, 0.4),
     });
 
     const plate = new THREE.Mesh(plateGeo, plateMat);
     plate.position.set(0, 0.6, 0);
     scene.add(plate);
 
-    // ---------- キューブカメラで動的反射 ----------
-    const cubeTarget = new THREE.WebGLCubeRenderTarget(512, {
-      type: THREE.HalfFloatType,
-      generateMipmaps: true,
-      minFilter: THREE.LinearMipmapLinearFilter,
-    });
-    cubeTarget.texture.colorSpace = THREE.SRGBColorSpace;
-    const cubeCamera = new THREE.CubeCamera(0.1, 100, cubeTarget);
-    cubeCamera.position.copy(plate.position);
-    scene.add(cubeCamera);
-
-    function updateReflection() {
-      plate.visible = false;
-      cubeCamera.update(renderer, scene);
-      plate.visible = true;
-      plateMat.envMap = cubeTarget.texture;
-    }
-
     // ---------- アニメーションループ ----------
     function animate() {
       requestAnimationFrame(animate);
-      updateReflection();
       controls.update();
       renderer.render(scene, camera);
     }
