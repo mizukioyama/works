@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>リアル金属板 – three.js（反射＆カメラ反応）</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body { background: #0b0d12; overflow: hidden; font-family: system-ui, -apple-system, Segoe UI, Roboto, Meiryo, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    .ui { position: fixed; left: 12px; bottom: 12px; color: #e6edf3; opacity: .9; font-size: 12px; line-height: 1.5; user-select: none; }
+    .ui b { color: #9cd2ff; }
+    .ui .pill { display:inline-block; padding:.2em .6em; border:1px solid #2b3139; border-radius:999px; margin-right:.25em; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="ui">
+    <div class="pill">ドラッグ：回転</div>
+    <div class="pill">ホイール：ズーム</div>
+    <div class="pill">Shift+ドラッグ：パン</div>
+    <div style="margin-top:.4em">カメラを動かすほど<b>反射</b>が変化します（動的反射）。</div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+    import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+    import { RoomEnvironment } from 'https://unpkg.com/three@0.160.0/examples/jsm/environments/RoomEnvironment.js';
+    import { FlakesTexture } from 'https://unpkg.com/three@0.160.0/examples/jsm/textures/FlakesTexture.js';
+    import { RoundedBoxGeometry } from 'https://unpkg.com/three@0.160.0/examples/jsm/geometries/RoundedBoxGeometry.js';
+    import { RectAreaLightUniformsLib } from 'https://unpkg.com/three@0.160.0/examples/jsm/lights/RectAreaLightUniformsLib.js';
+
+    // ---------- 基本セットアップ ----------
+    const container = document.getElementById('app');
+    const scene = new THREE.Scene();
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    container.appendChild(renderer.domElement);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(2.2, 1.6, 3.4);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(0, 0.5, 0);
+
+    // ---------- 物理ベース環境（室内ライティング） ----------
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const env = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+    scene.environment = env;
+    scene.background = new THREE.Color(0x0b0d12);
+
+    // ---------- スタジオ風ルーム（反射させる対象を用意） ----------
+    RectAreaLightUniformsLib.init();
+    const room = new THREE.Group();
+
+    // 床
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x111419, roughness: 0.9, metalness: 0.0 });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = 0;
+    floor.receiveShadow = true;
+    room.add(floor);
+
+    // 壁（左右 & 背面）
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x0f1217, roughness: 0.95 });
+    const wallGeo = new THREE.PlaneGeometry(20, 10);
+    const leftWall = new THREE.Mesh(wallGeo, wallMat); leftWall.position.set(-10, 5, 0); leftWall.rotation.y = Math.PI/2; room.add(leftWall);
+    const rightWall = new THREE.Mesh(wallGeo, wallMat); rightWall.position.set(10, 5, 0); rightWall.rotation.y = -Math.PI/2; room.add(rightWall);
+    const backWall = new THREE.Mesh(wallGeo, wallMat); backWall.position.set(0, 5, -10); room.add(backWall);
+
+    // ソフトライト用の矩形パネル（反射に映る明るい面）
+    function addLightPanel(x, y, z, w, h, rotY = 0) {
+      const emissive = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 3.0, roughness: 1.0, metalness: 0.0 });
+      const panel = new THREE.Mesh(new THREE.PlaneGeometry(w, h), emissive);
+      panel.position.set(x, y, z);
+      panel.rotation.y = rotY;
+      room.add(panel);
+    }
+    addLightPanel(-4.5, 3.2, -3.0, 4.0, 2.0, Math.PI/8);
+    addLightPanel( 5.0, 2.8, -2.5, 3.5, 1.6, -Math.PI/10);
+    addLightPanel( 0.0, 4.2, -4.5, 5.0, 1.2, 0);
+
+    scene.add(room);
+
+    // ---------- 金属板（ラウンドエッジの鉄板） ----------
+    // FlakesTexture で微小金属片ノーマルを生成（リアルな金属感）
+    const flakes = new FlakesTexture();
+    const normalMap = new THREE.CanvasTexture(flakes);
+    normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
+    normalMap.repeat.set(4, 4);
+    normalMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+    const plateGeo = new RoundedBoxGeometry(1.6, 0.02, 1.0, 8, 0.05);
+    const plateMat = new THREE.MeshPhysicalMaterial({
+      metalness: 1.0,
+      roughness: 0.2,           // 小さくするほど鏡面に
+      envMapIntensity: 1.0,
+      reflectivity: 1.0,
+      clearcoat: 0.6,           // クリア層のツヤ
+      clearcoatRoughness: 0.15,
+      normalMap,
+      normalScale: new THREE.Vector2(0.3, 0.3),
+    });
+
+    const plate = new THREE.Mesh(plateGeo, plateMat);
+    plate.position.set(0, 0.6, 0);
+    plate.castShadow = true;
+    scene.add(plate);
+
+    // スタンド（鉄板を浮かせる台）
+    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 32), new THREE.MeshStandardMaterial({ color: 0x888b95, metalness: 0.9, roughness: 0.35 }));
+    stand.position.set(0, 0.6/2, 0);
+    scene.add(stand);
+
+    // 参考用の周辺オブジェクト（反射に映る）
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.18, 32, 32), new THREE.MeshPhysicalMaterial({ color: 0x7fb0ff, metalness: 0.5, roughness: 0.3, clearcoat: 0.5 }));
+    sphere.position.set(-0.8, 0.35, 0.2);
+    scene.add(sphere);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), new THREE.MeshPhysicalMaterial({ color: 0xff9fb0, metalness: 0.3, roughness: 0.5 }));
+    box.position.set(0.9, 0.28, -0.15);
+    scene.add(box);
+
+    // ---------- 動的反射（キューブカメラによるリアルタイム環境マップ） ----------
+    const cubeTarget = new THREE.WebGLCubeRenderTarget(512, {
+      type: THREE.HalfFloatType,
+      generateMipmaps: true,
+      minFilter: THREE.LinearMipmapLinearFilter,
+    });
+    cubeTarget.texture.colorSpace = THREE.SRGBColorSpace;
+    const cubeCamera = new THREE.CubeCamera(0.1, 100, cubeTarget);
+    cubeCamera.position.copy(plate.position);
+    scene.add(cubeCamera);
+
+    // フレーム毎に反射を更新（板自身は更新中に非表示→自己映り込みを防ぐ）
+    function updateReflection() {
+      plate.visible = false;
+      cubeCamera.update(renderer, scene);
+      plate.visible = true;
+      plateMat.envMap = cubeTarget.texture;
+      plateMat.needsUpdate = false;
+    }
+
+    // ---------- マウス・傾きに反応（微妙なパララックス） ----------
+    const parallax = new THREE.Vector2();
+    window.addEventListener('pointermove', (e) => {
+      const x = (e.clientX / window.innerWidth) * 2 - 1;
+      const y = -(e.clientY / window.innerHeight) * 2 + 1;
+      parallax.set(x, y);
+    });
+
+    // ---------- アニメーションループ ----------
+    let t = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      t += 0.01;
+
+      // オブジェクトにわずかな動き（反射の変化を強調）
+      sphere.position.y = 0.35 + Math.sin(t) * 0.03;
+      box.rotation.y += 0.01;
+
+      // カメラの微パララックス（視点を少し揺らす）
+      controls.target.lerp(new THREE.Vector3(parallax.x * 0.05, 0.5 + parallax.y * 0.03, 0), 0.08);
+      controls.update();
+
+      // 反射更新（毎フレーム）
+      updateReflection();
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // ---------- リサイズ対応 ----------
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
