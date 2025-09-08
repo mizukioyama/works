@@ -1,179 +1,156 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>超リアル金属板（Three.js UMD, GitHub Pages 対応）</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>超リアル金属板</title>
   <style>
-    html,body{height:100%;margin:0;background:#08090b}
-    #app{width:100%;height:100%}
-    .ui{position:fixed;left:12px;bottom:12px;color:#e6edf3;font-size:13px}
-    .badge{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.04);margin-right:8px;border:1px solid rgba(255,255,255,0.04)}
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background-color: #08090b;
+      overflow: hidden;
+    }
+    #app {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .ui {
+      position: fixed;
+      left: 12px;
+      bottom: 12px;
+      color: #e6edf3;
+      font-size: 13px;
+      font-family: sans-serif;
+    }
+    .badge {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      margin-right: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
   </style>
 </head>
 <body>
   <div id="app"></div>
-  <div class="ui"><span class="badge">ドラッグ：回転</span><span class="badge">ホイール：ズーム</span><span class="badge">Shift+ドラッグ：パン</span></div>
+  <div class="ui">
+    <span class="badge">ドラッグ：回転</span>
+    <span class="badge">ホイール：ズーム</span>
+    <span class="badge">Shift+ドラッグ：パン</span>
+  </div>
 
-  <!-- UMD (non-module) ビルドを読み込む（これならブラウザのモジュール解決問題を回避できます） -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-  <!-- examples/js の非モジュール版（UMDではなく古いグローバル依存だが動く） -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/RGBELoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/pmrem/PMREMGenerator.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/pmrem/PMREMCubeUVPacker.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/geometries/RoundedBoxGeometry.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/textures/FlakesTexture.js"></script>
+  <!-- ES Module 形式で three.js を読み込み -->
+  <script type="module">
+    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js";
+    import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/controls/OrbitControls.js";
+    import { RGBELoader } from "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/RGBELoader.js";
+    import { FlakesTexture } from "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/textures/FlakesTexture.js";
 
-  <!-- メインスクリプト（UMD版に依存） -->
-  <script>
-    (function(){
-      if(typeof THREE === 'undefined'){
-        document.body.innerHTML = '<p style="color:#fff;padding:24px">Three.js が読み込まれていません。CDN にアクセスできる環境か確認してください。</p>';
-        return;
-      }
+    // ----- 基本セットアップ -----
+    const container = document.getElementById("app");
+    const scene = new THREE.Scene();
 
-      // ----- 基本セットアップ -----
-      const container = document.getElementById('app');
-      const scene = new THREE.Scene();
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    container.appendChild(renderer.domElement);
 
-      const renderer = new THREE.WebGLRenderer({ antialias:true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(2.2, 1.4, 3.5);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.target.set(0, 0.5, 0);
+
+    // ----- 環境光（HDRI） -----
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    pmremGenerator.compileEquirectangularShader();
+
+    const hdrURL =
+      "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r152/examples/textures/equirectangular/royal_esplanade_1k.hdr";
+
+    new RGBELoader()
+      .setDataType(THREE.UnsignedByteType)
+      .load(hdrURL, function (texture) {
+        const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+        scene.environment = envMap;
+        scene.background = envMap;
+        texture.dispose();
+        pmremGenerator.dispose();
+      });
+
+    // ----- 金属板 -----
+    const flakes = new FlakesTexture();
+    const normalMap = new THREE.CanvasTexture(flakes);
+    normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
+    normalMap.repeat.set(6, 2);
+
+    const plateGeo = new THREE.BoxGeometry(1.6, 0.018, 1.0);
+    const plateMat = new THREE.MeshPhysicalMaterial({
+      color: 0x9aa0a6,
+      metalness: 1.0,
+      roughness: 0.12,
+      envMapIntensity: 1.4,
+      reflectivity: 1.0,
+      clearcoat: 0.8,
+      clearcoatRoughness: 0.06,
+      normalMap: normalMap,
+      normalScale: new THREE.Vector2(0.6, 0.6),
+    });
+
+    const plate = new THREE.Mesh(plateGeo, plateMat);
+    plate.position.set(0, 0.6, 0);
+    scene.add(plate);
+
+    // ----- 床 -----
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(20, 20),
+      new THREE.MeshStandardMaterial({ color: 0x0e1114, roughness: 0.95, metalness: 0 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = 0;
+    scene.add(floor);
+
+    // ----- カメラで反射を更新 -----
+    const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(1024, {
+      format: THREE.RGBAFormat,
+      generateMipmaps: true,
+      minFilter: THREE.LinearMipmapLinearFilter,
+    });
+    const cubeCamera = new THREE.CubeCamera(0.01, 50, cubeRenderTarget);
+    cubeCamera.position.copy(plate.position);
+    scene.add(cubeCamera);
+
+    function updateReflection() {
+      plate.visible = false;
+      cubeCamera.update(renderer, scene);
+      plate.visible = true;
+      plate.material.envMap = cubeRenderTarget.texture;
+      plate.material.needsUpdate = true;
+    }
+
+    // ----- アニメーション -----
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      updateReflection();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.0;
-      container.appendChild(renderer.domElement);
-
-      const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-      camera.position.set(2.2,1.4,3.5);
-
-      const controls = new THREE.OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-      controls.dampingFactor = 0.06;
-      controls.target.set(0,0.5,0);
-
-      // ----- 環境：HDRIをロード（失敗時は簡易Room風環境にフォールバック） -----
-      const pmremGenerator = new THREE.PMREMGenerator(renderer);
-      pmremGenerator.compileEquirectangularShader();
-
-      const hdrURL = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/equirectangular/royal_esplanade_1k.hdr';
-
-      function useFallbackEnvironment(){
-        // RoomEnvironment 互換の代替を簡易作成（明るさと方向性のあるライト）
-        scene.background = new THREE.Color(0x0b0d12);
-        const dir = new THREE.DirectionalLight(0xffffff, 1.2);
-        dir.position.set(5,10,7);
-        scene.add(dir);
-        const amb = new THREE.AmbientLight(0xffffff, 0.18);
-        scene.add(amb);
-      }
-
-      new THREE.RGBELoader()
-        .setDataType(THREE.UnsignedByteType)
-        .load(hdrURL,
-          function(texture){
-            try{
-              const envMap = pmremGenerator.fromEquirectangular(texture).texture;
-              scene.environment = envMap;
-              scene.background = envMap;
-              texture.dispose();
-              pmremGenerator.dispose();
-            }catch(e){
-              console.warn('HDRI を環境に変換できませんでした:', e);
-              useFallbackEnvironment();
-            }
-          },
-          undefined,
-          function(err){
-            console.warn('HDRI の読み込みに失敗しました。フォールバックを使用します。', err);
-            useFallbackEnvironment();
-          }
-        );
-
-      // ----- 金属板（高品質設定） -----
-      const flakes = new THREE.FlakesTexture();
-      const normalMap = new THREE.CanvasTexture(flakes);
-      normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
-      normalMap.repeat.set(6,2);
-      normalMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
-
-      const plateGeo = new THREE.RoundedBoxGeometry(1.6, 0.018, 1.0, 8, 0.04);
-      const plateMat = new THREE.MeshPhysicalMaterial({
-        color: 0x9aa0a6,
-        metalness: 1.0,
-        roughness: 0.12,
-        envMapIntensity: 1.4,
-        reflectivity: 1.0,
-        clearcoat: 0.8,
-        clearcoatRoughness: 0.06,
-        normalMap: normalMap,
-        normalScale: new THREE.Vector2(0.6, 0.6)
-      });
-
-      const plate = new THREE.Mesh(plateGeo, plateMat);
-      plate.position.set(0,0.6,0);
-      scene.add(plate);
-
-      // ----- 周辺の小物（反射に映る要素） -----
-      const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.18, 64, 64), new THREE.MeshPhysicalMaterial({color:0x7fb0ff, metalness:0.6, roughness:0.2, clearcoat:0.3}));
-      sphere.position.set(-0.85,0.36,0.28);
-      scene.add(sphere);
-
-      const box = new THREE.Mesh(new THREE.BoxGeometry(0.26,0.26,0.26), new THREE.MeshStandardMaterial({color:0xff9fb0, metalness:0.3, roughness:0.45}));
-      box.position.set(0.95,0.3,-0.12);
-      scene.add(box);
-
-      // ----- 床（反射を受け止める） -----
-      const floor = new THREE.Mesh(new THREE.PlaneGeometry(20,20), new THREE.MeshStandardMaterial({color:0x0e1114, roughness:0.95, metalness:0}));
-      floor.rotation.x = -Math.PI/2; floor.position.y = 0; scene.add(floor);
-
-      // ----- 動的キューブカメラでリアルな動的反射（自己反射は回避） -----
-      const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(1024, { format: THREE.RGBAFormat, generateMipmaps:true, minFilter: THREE.LinearMipmapLinearFilter });
-      const cubeCamera = new THREE.CubeCamera(0.01, 50, cubeRenderTarget);
-      cubeCamera.position.copy(plate.position);
-      scene.add(cubeCamera);
-
-      function updateReflection(){
-        plate.visible = false; // 自己反射を避ける
-        cubeCamera.update(renderer, scene);
-        plate.visible = true;
-        plate.material.envMap = cubeRenderTarget.texture;
-        plate.material.needsUpdate = true;
-      }
-
-      // ----- マウス視差 -----
-      const par = new THREE.Vector2();
-      window.addEventListener('pointermove', (e)=>{
-        par.x = (e.clientX / window.innerWidth) * 2 - 1;
-        par.y = - (e.clientY / window.innerHeight) * 2 + 1;
-      });
-
-      // ----- アニメーション -----
-      let t = 0;
-      function animate(){
-        requestAnimationFrame(animate);
-        t += 0.01;
-        sphere.position.y = 0.36 + Math.sin(t*1.2)*0.03;
-        box.rotation.y += 0.008;
-
-        controls.target.lerp(new THREE.Vector3(par.x*0.06, 0.5 + par.y*0.03, 0), 0.08);
-        controls.update();
-
-        // 高品質のため毎フレーム更新（必要に応じて間引き可）
-        updateReflection();
-
-        renderer.render(scene, camera);
-      }
-      animate();
-
-      window.addEventListener('resize', ()=>{
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-      });
-
-    })();
+    });
   </script>
 </body>
 </html>
