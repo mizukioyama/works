@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>リアルな鉄板</title>
+  <title>超リアルな鉄板</title>
   <style>
     body {
       margin: 0;
@@ -20,9 +20,11 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/build/three.min.js"></script>
   <!-- OrbitControls r138 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- RGBELoader for HDRI -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.138.0/examples/js/loaders/RGBELoader.js"></script>
 
   <script>
-    // ===== シーンの作成 =====
+    // ===== シーン作成 =====
     const scene = new THREE.Scene();
 
     // ===== カメラ設定 =====
@@ -38,30 +40,37 @@
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.shadowMap.enabled = true;
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
     document.body.appendChild(renderer.domElement);
 
-    // ===== 環境光 =====
-    const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+    // ===== ライティング（3点照明） =====
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    keyLight.position.set(5, 5, 5);
+    scene.add(keyLight);
+
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    fillLight.position.set(-5, 3, 2);
+    scene.add(fillLight);
+
+    const backLight = new THREE.DirectionalLight(0xffffff, 0.4);
+    backLight.position.set(0, 5, -5);
+    scene.add(backLight);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.3);
     scene.add(ambient);
 
-    // ===== スポットライト =====
-    const light = new THREE.SpotLight(0xffffff, 1.2);
-    light.position.set(5, 5, 5);
-    light.castShadow = true;
-    scene.add(light);
-
-    // ===== 環境マップ（反射用） =====
-    const cubeTextureLoader = new THREE.CubeTextureLoader();
-    const envMap = cubeTextureLoader.load([
-      "https://threejs.org/examples/textures/cube/Bridge2/posx.jpg",
-      "https://threejs.org/examples/textures/cube/Bridge2/negx.jpg",
-      "https://threejs.org/examples/textures/cube/Bridge2/posy.jpg",
-      "https://threejs.org/examples/textures/cube/Bridge2/negy.jpg",
-      "https://threejs.org/examples/textures/cube/Bridge2/posz.jpg",
-      "https://threejs.org/examples/textures/cube/Bridge2/negz.jpg",
-    ]);
-    scene.background = envMap;
+    // ===== HDRI 環境マップ =====
+    const rgbeLoader = new THREE.RGBELoader();
+    rgbeLoader.load(
+      "https://threejs.org/examples/textures/equirectangular/venice_sunset_1k.hdr",
+      function (texture) {
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        scene.environment = texture;
+        scene.background = texture;
+      }
+    );
 
     // ===== 鉄板テクスチャ =====
     const textureLoader = new THREE.TextureLoader();
@@ -69,15 +78,22 @@
     const metalNormal = textureLoader.load("https://threejs.org/examples/textures/metal/BrushedMetal_normal.png");
     const metalRoughness = textureLoader.load("https://threejs.org/examples/textures/metal/BrushedMetal_roughness.png");
 
-    // ===== PBRマテリアルで鉄板を再現 =====
+    // 高解像度に見せるためリピート設定
+    metalColor.wrapS = metalColor.wrapT = THREE.RepeatWrapping;
+    metalNormal.wrapS = metalNormal.wrapT = THREE.RepeatWrapping;
+    metalRoughness.wrapS = metalRoughness.wrapT = THREE.RepeatWrapping;
+    metalColor.repeat.set(3, 3);
+    metalNormal.repeat.set(3, 3);
+    metalRoughness.repeat.set(3, 3);
+
+    // ===== PBRマテリアル =====
     const metalMaterial = new THREE.MeshStandardMaterial({
       map: metalColor,
       normalMap: metalNormal,
       roughnessMap: metalRoughness,
       metalness: 1.0,
-      roughness: 0.15,
-      envMap: envMap,
-      envMapIntensity: 1.2,
+      roughness: 0.1,
+      envMapIntensity: 2.5,
     });
 
     // ===== 鉄板オブジェクト =====
@@ -92,6 +108,8 @@
     // ===== カメラ操作 =====
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.enablePan = false;
 
     // ===== レンダリングループ =====
     function animate() {
