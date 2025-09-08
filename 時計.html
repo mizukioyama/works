@@ -2,101 +2,252 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>幻想的な液体と霧</title>
-  <style>body{margin:0;overflow:hidden;background:#000;}</style>
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
-      "orbitcontrols": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/controls/OrbitControls.js",
-      "effectcomposer": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/postprocessing/EffectComposer.js",
-      "renderpass": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/postprocessing/RenderPass.js",
-      "unrealbloom": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/postprocessing/UnrealBloomPass.js"
-    }
-  }
-  </script>
+  <title>幻想的な液体リング（修正版）</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    body { margin:0; overflow:hidden; background:#111; }
+    canvas { display:block; }
+  </style>
 </head>
 <body>
 <script type="module">
-import * as THREE from "three";
-import { OrbitControls } from "orbitcontrols";
-import { EffectComposer } from "effectcomposer";
-import { RenderPass } from "renderpass";
-import { UnrealBloomPass } from "unrealbloom";
+// --- Three + Postprocessing (ESM CDN) ---
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js';
+import { EffectComposer } from 'https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/postprocessing/UnrealBloomPass.js';
 
-// シーン
+// --- 基本 ---
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x000000, 0.05);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 2000);
+camera.position.z = 10;
 
-// カメラ
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
-camera.position.set(0, 0, 6);
-
-// レンダラー
-const renderer = new THREE.WebGLRenderer({antialias:true});
+const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0x111111, 1);
 document.body.appendChild(renderer.domElement);
 
-// コントロール
-new OrbitControls(camera, renderer.domElement);
-
-// 液体っぽい球
-const sphereGeo = new THREE.SphereGeometry(1.2, 128, 128);
-const sphereMat = new THREE.MeshPhysicalMaterial({
-  color: new THREE.Color(0x66ccff),
-  metalness: 0.2,
-  roughness: 0.3,
-  transparent: true,
-  opacity: 0.7,
-  transmission: 0.8,
-  clearcoat: 1.0,
-  clearcoatRoughness: 0.2
-});
-const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-scene.add(sphere);
-
-// 霧のようなリング
-const ringGeo = new THREE.RingGeometry(2.5, 3, 128);
-const ringMat = new THREE.MeshBasicMaterial({
-  color: 0xffffff,
-  transparent: true,
-  opacity: 0.15,
-  side: THREE.DoubleSide
-});
-const ring = new THREE.Mesh(ringGeo, ringMat);
-ring.rotation.x = Math.PI/2;
-scene.add(ring);
-
-// ポストプロセス（幻想的なぼかし）
+// --- ポストプロセス (幻想的なにじみ) ---
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 1.2, 0.6, 0.1);
-composer.addPass(bloomPass);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.9, 0.8, 0.1);
+bloom.threshold = 0.05;
+bloom.strength = 0.9;
+bloom.radius = 0.6;
+composer.addPass(bloom);
 
-// 頂点変形のためのオリジナル位置
-const origPos = sphereGeo.attributes.position.array.slice();
+// ライト（球体にやわらかなハイライト）
+const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambient);
+const point = new THREE.PointLight(0xffffff, 0.6);
+point.position.set(5,5,10);
+scene.add(point);
 
-// アニメーション
-function animate(time){
+// --- ユーティリティ: ソフトな光（Canvas） ---
+function createGlowTexture(size = 1024, innerColor='rgba(255,255,255,1)', auraColor='rgba(150,180,255,0.35)') {
+  const cvs = document.createElement('canvas');
+  cvs.width = cvs.height = size;
+  const ctx = cvs.getContext('2d');
+  const r = size/2;
+
+  // 中心の強い白 + 外側の淡い色
+  const g = ctx.createRadialGradient(r, r, r*0.02, r, r, r);
+  g.addColorStop(0.0, innerColor);
+  g.addColorStop(0.18, 'rgba(255,255,255,0.95)');
+  g.addColorStop(0.4, auraColor);
+  g.addColorStop(1.0, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,size,size);
+
+  return new THREE.CanvasTexture(cvs);
+}
+
+// --- 中央の白い球体（平面の光 + 立体の液体球） ---
+const coreGroup = new THREE.Group();
+scene.add(coreGroup);
+
+// 平面の光（中心の白い発光）
+const glowPlaneGeo = new THREE.PlaneGeometry(6,6);
+const glowTex = createGlowTexture(1024, 'rgba(255,255,255,1)', 'rgba(200,220,255,0.28)');
+const glowMat = new THREE.MeshBasicMaterial({
+  map: glowTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+});
+const glowPlane = new THREE.Mesh(glowPlaneGeo, glowMat);
+coreGroup.add(glowPlane);
+
+// 立体の液体球（頂点を動かして「溶け流れる」ように）
+const sphereGeo = new THREE.SphereGeometry(1.2, 96, 96); // 高解像度にするとより滑らか
+const sphereMat = new THREE.MeshPhysicalMaterial({
+  color: 0xffffff,
+  metalness: 0.1,
+  roughness: 0.45,
+  transmission: 0.7,
+  transparent: true,
+  opacity: 0.95,
+  clearcoat: 0.5,
+  clearcoatRoughness: 0.2
+});
+const liquidSphere = new THREE.Mesh(sphereGeo, sphereMat);
+coreGroup.add(liquidSphere);
+
+// --- 頂点変形用データ（安全にコピー） ---
+const posAttr = sphereGeo.attributes.position;
+const normalAttr = sphereGeo.attributes.normal;
+const vertexCount = posAttr.count;
+const origPositions = new Float32Array(posAttr.array.length);
+origPositions.set(posAttr.array);
+const origNormals = new Float32Array(normalAttr.array.length);
+origNormals.set(normalAttr.array);
+
+// per-vertex random phase to diversify motion
+const phases = new Float32Array(vertexCount);
+for (let i=0;i<vertexCount;i++) phases[i] = Math.random()*Math.PI*2;
+
+// --- リングテクスチャ（単色・境界を淡く） ---
+function createRingTexture(color = 'rgba(102,217,255,1)', size = 1024) {
+  const cvs = document.createElement('canvas');
+  cvs.width = cvs.height = size;
+  const ctx = cvs.getContext('2d');
+  const r = size/2;
+
+  // 塗り（単色）
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(r, r, r, 0, Math.PI*2);
+  ctx.fill();
+
+  // マスクで内側を抜く（柔らかい境界）
+  const mask = ctx.createRadialGradient(r, r, r*0.42, r, r, r*0.98);
+  mask.addColorStop(0.0, 'rgba(0,0,0,0)');
+  // make boundary very soft and faint (smoke-like)
+  mask.addColorStop(0.55, 'rgba(0,0,0,0.85)');
+  mask.addColorStop(0.85, 'rgba(0,0,0,0.35)');
+  mask.addColorStop(1.0, 'rgba(0,0,0,0)');
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.fillStyle = mask;
+  ctx.fillRect(0,0,size,size);
+  ctx.globalCompositeOperation = 'source-over';
+
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// --- 動的リング（単色） ---
+function createSoftRing(radius, color, z=0) {
+  const tex = createRingTexture(color, 1024);
+  const geo = new THREE.PlaneGeometry(radius*2, radius*2);
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex, transparent: true, opacity: 0.85,
+    blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.z = z;
+  return mesh;
+}
+
+// 三色（単色）を用意
+const COLOR_A = 'rgba(102,217,255,1)'; // teal-ish
+const COLOR_B = 'rgba(178,102,255,1)'; // violet-ish
+const COLOR_C = 'rgba(255,120,160,1)'; // rose-ish
+
+// 時計リング（中心に近い3つ）
+const ringSec = createSoftRing(1.4, COLOR_A, 0.05);
+const ringMin = createSoftRing(1.7, COLOR_B, 0.08);
+const ringHour = createSoftRing(2.0, COLOR_C, 0.1);
+scene.add(ringSec, ringMin, ringHour);
+
+// 背景の薄い大きめリング（霧っぽさ）
+const bgRing = createSoftRing(6.5, 'rgba(180,200,255,0.35)', -6);
+scene.add(bgRing);
+
+// --- アニメーションパラメータ ---
+const clock = new THREE.Clock();
+const startTime = Date.now();
+
+// control how strong the displacement is
+const baseAmplitude = 0.12; // overall displacement strength
+const freqs = { x: 2.0, y: 1.7, z: 2.8 };
+const speeds = { x: 0.9, y: 0.6, z: 0.4 };
+
+// utility: safe setXYZ (avoid NaN)
+function safeSetXYZ(attr, i, x, y, z, ox, oy, oz) {
+  if (!isFinite(x) || !isFinite(y) || !isFinite(z)) {
+    attr.setXYZ(i, ox, oy, oz);
+  } else {
+    attr.setXYZ(i, x, y, z);
+  }
+}
+
+// --- アニメーション ---
+function animate() {
   requestAnimationFrame(animate);
 
-  // 球を液体のように変形（ランダム反響感）
-  const pos = sphereGeo.attributes.position;
-  for(let i=0; i<pos.count; i++){
-    const ix = i*3, iy = i*3+1, iz = i*3+2;
-    const ox = origPos[ix], oy = origPos[iy], oz = origPos[iz];
-    const noise = Math.sin(time*0.001 + ox*3 + oy*2 + oz*5);
-    const scale = 1 + 0.05*noise;
-    pos.setXYZ(i, ox*scale, oy*scale, oz*scale);
+  const now = Date.now();
+  const t = clock.getElapsedTime();
+
+  // --- liquid sphere deformation (CPU-side, along normals) ---
+  const positions = sphereGeo.attributes.position;
+  const normals = sphereGeo.attributes.normal;
+  const arr = positions.array;
+  for (let i = 0; i < vertexCount; i++) {
+    const idx = i*3;
+    const ox = origPositions[idx], oy = origPositions[idx+1], oz = origPositions[idx+2];
+    const nx = origNormals[idx], ny = origNormals[idx+1], nz = origNormals[idx+2];
+
+    // layered smooth noise using sin/cos with per-vertex phase for variety
+    const p = phases[i];
+    const n1 = Math.sin( (ox*freqs.x) + t*speeds.x + p );
+    const n2 = Math.cos( (oy*freqs.y*0.8) + t*speeds.y*1.1 + p*0.7 );
+    const n3 = Math.sin( (oz*freqs.z*1.2) + t*speeds.z*0.6 + p*1.3 );
+    // combine -> smooth liquid motion
+    const noiseVal = (n1*0.6 + n2*0.35 + n3*0.4) * baseAmplitude;
+
+    const newX = ox + nx * noiseVal;
+    const newY = oy + ny * noiseVal;
+    const newZ = oz + nz * noiseVal;
+
+    safeSetXYZ(positions, i, newX, newY, newZ, ox, oy, oz);
   }
-  pos.needsUpdate = true;
+  positions.needsUpdate = true;
+  // recompute normals for correct lighting
+  sphereGeo.computeVertexNormals();
+  // recompute bounding sphere (safe because we prevented NaN)
+  sphereGeo.computeBoundingSphere();
 
-  // リングを淡く脈動
-  ring.scale.setScalar(1.0 + 0.1*Math.sin(time*0.001));
+  // --- center group slow rotation (gently) ---
+  coreGroup.rotation.z = Math.sin(t*0.2)*0.03 + t*0.02;
 
+  // --- rings: each rotates in different direction + wobble (liquid/flow effect) ---
+  ringSec.rotation.z += 0.009 + Math.sin(t*0.7)*0.0015; // clockwise fast-ish
+  ringMin.rotation.z -= 0.004 + Math.cos(t*0.5)*0.0012; // counter-clockwise slower
+  ringHour.rotation.z += 0.002 + Math.sin(t*0.3)*0.0009; // slowest
+
+  // slight per-ring wobble in X/Y orientation to look 'fluid'
+  ringSec.rotation.x = 0.04 * Math.sin(t*0.9 + 0.2);
+  ringMin.rotation.y = 0.03 * Math.cos(t*0.6 - 0.4);
+  ringHour.rotation.x = 0.02 * Math.sin(t*0.35 + 0.9);
+
+  // subtle scale breathing for fluidity
+  ringSec.scale.setScalar(1 + 0.01*Math.sin(t*1.7));
+  ringMin.scale.setScalar(1 + 0.015*Math.sin(t*1.1 + 0.3));
+  ringHour.scale.setScalar(1 + 0.008*Math.sin(t*0.8 + 1.1));
+
+  // background ring slow pulse
+  bgRing.material.opacity = 0.25 + 0.06 * (0.5 + 0.5*Math.sin(t*0.4));
+
+  // render via composer to include bloom
   composer.render();
 }
 animate();
+
+// --- リサイズ対応 ---
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+});
 </script>
 </body>
 </html>
