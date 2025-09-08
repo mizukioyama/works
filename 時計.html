@@ -1,16 +1,17 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <title>幻想的な時計リング</title>
-  <style>
-    body { margin:0; overflow:hidden; background:#111; }
-    canvas { display:block; }
-  </style>
+  <meta charset="utf-8" />
+  <title>幻想的な液体と霧</title>
+  <style>body{margin:0;overflow:hidden;background:#000;}</style>
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js"
+      "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+      "orbitcontrols": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/controls/OrbitControls.js",
+      "effectcomposer": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/postprocessing/EffectComposer.js",
+      "renderpass": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/postprocessing/RenderPass.js",
+      "unrealbloom": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/postprocessing/UnrealBloomPass.js"
     }
   }
   </script>
@@ -18,138 +19,84 @@
 <body>
 <script type="module">
 import * as THREE from "three";
+import { OrbitControls } from "orbitcontrols";
+import { EffectComposer } from "effectcomposer";
+import { RenderPass } from "renderpass";
+import { UnrealBloomPass } from "unrealbloom";
 
-// === 基本セットアップ ===
+// シーン
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 20000);
-camera.position.z = 10;
+scene.fog = new THREE.FogExp2(0x000000, 0.05);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x111111, 1);
+// カメラ
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(0, 0, 6);
+
+// レンダラー
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// === 発光テクスチャ作成 ===
-function createGlowTexture(size = 1024, innerColor="rgba(255,255,255,1)", outerColor="rgba(255,255,255,0)") {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  const r = size/2;
+// コントロール
+new OrbitControls(camera, renderer.domElement);
 
-  const gradient = ctx.createRadialGradient(r, r, r*0.1, r, r, r);
-  gradient.addColorStop(0.0, innerColor);
-  gradient.addColorStop(1.0, outerColor);
+// 液体っぽい球
+const sphereGeo = new THREE.SphereGeometry(1.2, 128, 128);
+const sphereMat = new THREE.MeshPhysicalMaterial({
+  color: new THREE.Color(0x66ccff),
+  metalness: 0.2,
+  roughness: 0.3,
+  transparent: true,
+  opacity: 0.7,
+  transmission: 0.8,
+  clearcoat: 1.0,
+  clearcoatRoughness: 0.2
+});
+const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+scene.add(sphere);
 
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0,0,size,size);
+// 霧のようなリング
+const ringGeo = new THREE.RingGeometry(2.5, 3, 128);
+const ringMat = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  transparent: true,
+  opacity: 0.15,
+  side: THREE.DoubleSide
+});
+const ring = new THREE.Mesh(ringGeo, ringMat);
+ring.rotation.x = Math.PI/2;
+scene.add(ring);
 
-  return new THREE.CanvasTexture(canvas);
-}
+// ポストプロセス（幻想的なぼかし）
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 1.2, 0.6, 0.1);
+composer.addPass(bloomPass);
 
-// === 中心の白い発光球 ===
-function createCore() {
-  const group = new THREE.Group();
+// 頂点変形のためのオリジナル位置
+const origPos = sphereGeo.attributes.position.array.slice();
 
-  // 実体球
-  const geo = new THREE.SphereGeometry(1.2, 64, 64);
-  const mat = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.95
-  });
-  const sphere = new THREE.Mesh(geo, mat);
-  group.add(sphere);
-
-  // 発光オーラ
-  const auraGeo = new THREE.PlaneGeometry(4.5, 4.5);
-  const auraMat = new THREE.MeshBasicMaterial({
-    map: createGlowTexture(1024, "rgba(255,255,255,0.9)", "rgba(255,255,255,0)"),
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: false
-  });
-  const aura = new THREE.Mesh(auraGeo, auraMat);
-  group.add(aura);
-
-  return group;
-}
-const core = createCore();
-scene.add(core);
-
-// === 幻想的なリング作成 ===
-function createRing(radius, baseHue=200) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 1024;
-  const ctx = canvas.getContext("2d");
-  const r = canvas.width/2;
-
-  const grad = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
-  grad.addColorStop(0.0, `hsla(${baseHue},100%,70%,0)`);
-  grad.addColorStop(0.6, `hsla(${baseHue},100%,70%,0.6)`);
-  grad.addColorStop(1.0, `hsla(${baseHue},100%,70%,0)`);
-
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.arc(r, r, r, 0, Math.PI*2);
-  ctx.fill();
-
-  const texture = new THREE.CanvasTexture(canvas);
-  const geo = new THREE.PlaneGeometry(radius*2, radius*2);
-  const mat = new THREE.MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    opacity: 0.7,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: false
-  });
-  return new THREE.Mesh(geo, mat);
-}
-
-// === リング追加 ===
-const secRing = createRing(1.8, 330); // ピンク寄り
-const minRing = createRing(2.3, 180); // 緑寄り
-const hourRing = createRing(2.8, 260); // 青寄り
-scene.add(secRing, minRing, hourRing);
-
-// === 時間制御 ===
-const startDate = new Date();
-const clock = new THREE.Clock();
-
-function animate() {
+// アニメーション
+function animate(time){
   requestAnimationFrame(animate);
-  const now = new Date();
-  const t = clock.getElapsedTime();
 
-  // コアを回転
-  core.rotation.y = t * 0.15;
-  core.rotation.x = t * 0.1;
+  // 球を液体のように変形（ランダム反響感）
+  const pos = sphereGeo.attributes.position;
+  for(let i=0; i<pos.count; i++){
+    const ix = i*3, iy = i*3+1, iz = i*3+2;
+    const ox = origPos[ix], oy = origPos[iy], oz = origPos[iz];
+    const noise = Math.sin(time*0.001 + ox*3 + oy*2 + oz*5);
+    const scale = 1 + 0.05*noise;
+    pos.setXYZ(i, ox*scale, oy*scale, oz*scale);
+  }
+  pos.needsUpdate = true;
 
-  // 時計の針ベース
-  const sec = now.getSeconds() + now.getMilliseconds()/1000;
-  const min = now.getMinutes() + sec/60;
-  const hour = (now.getHours()%12) + min/60;
+  // リングを淡く脈動
+  ring.scale.setScalar(1.0 + 0.1*Math.sin(time*0.001));
 
-  secRing.rotation.z = -(sec/60)*Math.PI*2 + t*0.5;
-  minRing.rotation.z = -(min/60)*Math.PI*2 - t*0.2;
-  hourRing.rotation.z = -(hour/12)*Math.PI*2 + t*0.1;
-
-  // ゆらめき拡大縮小
-  secRing.scale.setScalar(1+0.05*Math.sin(t*2));
-  minRing.scale.setScalar(1+0.07*Math.cos(t*1.5));
-  hourRing.scale.setScalar(1+0.04*Math.sin(t));
-
-  renderer.render(scene, camera);
+  composer.render();
 }
 animate();
-
-// === リサイズ対応 ===
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
 </script>
 </body>
 </html>
