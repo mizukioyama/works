@@ -1,233 +1,102 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <title>幻想的な時計リング</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>超リアル金属板デモ</title>
   <style>
-    body { margin:0; overflow:hidden; background:#111; }
-    canvas { display:block; }
-  </style>
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js"
+    body {
+      margin: 0;
+      background: #000;
+      overflow: hidden;
     }
-  }
-  </script>
+    canvas {
+      display: block;
+    }
+  </style>
 </head>
 <body>
 <script type="module">
-import * as THREE from "three";
+  // three.js をCDNから読み込み（必ずフルURL）
+  import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js";
+  import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/controls/OrbitControls.js";
+  import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/environments/RoomEnvironment.js";
 
-// === 基本セットアップ ===
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 20000);
-camera.position.z = 10;
+  // シーン・カメラ・レンダラー
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 1.5, 4);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x111111, 1);
-document.body.appendChild(renderer.domElement);
-
-// === 光球テクスチャ ===
-function createGlowTexture(size = 1024) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  const r = size / 2;
-
-  const gradient = ctx.createRadialGradient(r, r, r*0.05, r, r, r);
-  gradient.addColorStop(0.0, "rgba(255,255,255,1.0)");
-  gradient.addColorStop(0.2, "rgba(220,240,255,0.7)");
-  gradient.addColorStop(0.5, "rgba(180,200,255,0.35)");
-  gradient.addColorStop(0.8, "rgba(150,180,255,0.15)");
-  gradient.addColorStop(1.0, "rgba(0,0,0,0)");
-
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, size, size);
-
-  return new THREE.CanvasTexture(canvas);
-}
-
-// === 光球本体 ===
-function createCore() {
-  const group = new THREE.Group();
-
-  const coreGeo = new THREE.PlaneGeometry(2.5, 2.5);
-  const coreMat = new THREE.MeshBasicMaterial({
-    map: createGlowTexture(),
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: false
-  });
-  const core = new THREE.Mesh(coreGeo, coreMat);
-  group.add(core);
-
-  const auraGeo = new THREE.PlaneGeometry(4.5, 4.5);
-  const auraMat = new THREE.MeshBasicMaterial({
-    map: createGlowTexture(),
-    transparent: true,
-    opacity: 0.4,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: false
-  });
-  const aura = new THREE.Mesh(auraGeo, auraMat);
-  group.add(aura);
-
-  return group;
-}
-const core = createCore();
-scene.add(core);
-
-// === 単色リング作成 ===
-function createSolidRing(radius, color) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  const r = canvas.width / 2;
-
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(r, r, r, 0, Math.PI * 2);
-  ctx.fill();
-
-  const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
-  mask.addColorStop(0.0, "rgba(0,0,0,0)");
-  mask.addColorStop(0.5, "rgba(0,0,0,0.7)");
-  mask.addColorStop(1.0, "rgba(0,0,0,0)");
-  ctx.globalCompositeOperation = "destination-in";
-  ctx.fillStyle = mask;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  const geo = new THREE.PlaneGeometry(radius*2, radius*2);
-  const mat = new THREE.MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    opacity: 0.6,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: true
-  });
-  return new THREE.Mesh(geo, mat);
-}
-
-// === 時計リング（動的な色変化あり） ===
-function createDynamicRing(radius) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 1024;
-  const ctx = canvas.getContext("2d");
-  const texture = new THREE.CanvasTexture(canvas);
-
-  function draw(hueShift) {
-    const r = canvas.width/2;
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-
-    const grad = ctx.createConicGradient(0, r, r);
-    for (let i = 0; i <= 1; i += 0.2) {
-      const hue = (i * 360 + hueShift) % 360;
-      grad.addColorStop(i, `hsla(${hue}, 100%, 60%, 0.25)`);
-    }
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(r, r, r, 0, Math.PI*2);
-    ctx.fill();
-
-    const mask = ctx.createRadialGradient(r, r, r*0.4, r, r, r*0.95);
-    mask.addColorStop(0.0, "rgba(0,0,0,0)");
-    mask.addColorStop(0.5, "rgba(0,0,0,0.7)");
-    mask.addColorStop(1.0, "rgba(0,0,0,0)");
-    ctx.globalCompositeOperation = "destination-in";
-    ctx.fillStyle = mask;
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.globalCompositeOperation = "source-over";
-
-    texture.needsUpdate = true;
-  }
-
-  const geo = new THREE.PlaneGeometry(radius*2, radius*2);
-  const mat = new THREE.MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    opacity: 0.5,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: true
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  return { mesh, draw };
-}
-
-// === 時計リング3つ ===
-const secRing = createDynamicRing(1.4);
-const minRing = createDynamicRing(1.7);
-const hourRing = createDynamicRing(2.0);
-scene.add(secRing.mesh, minRing.mesh, hourRing.mesh);
-
-// === カラーパレット ===
-const palette = Array.from({length:100}, (_,i)=>`hsla(${(i*360/100)},100%,60%,0.25)`);
-
-// === 時間管理 ===
-const startDate = new Date();
-const extraRings = [];
-const clock = new THREE.Clock();
-
-// === アニメーション ===
-function animate() {
-  requestAnimationFrame(animate);
-  const now = new Date();
-  const elapsedMs = now - startDate;
-  const t = clock.getElapsedTime();
-  const yearsPassed = Math.floor(elapsedMs / (1000*60*60*24*365));
-
-  // コア：ゆるやかな回転
-  core.rotation.z = t * 0.1;
-
-  // スケールの拡大（時間経過）
-  const scale = 1 + (elapsedMs / (1000*60*60*24*365*100)) * 9;
-  core.scale.set(scale, scale, 1);
-
-  // 時計の時間ベース回転
-  const sec = now.getSeconds() + now.getMilliseconds()/1000;
-  const min = now.getMinutes() + sec/60;
-  const hour = (now.getHours()%12) + min/60;
-
-  secRing.mesh.rotation.z = -(sec/60)*Math.PI*2 + t*0.5;  // 秒リング + 揺らめき
-  minRing.mesh.rotation.z = -(min/60)*Math.PI*2 - t*0.2;  // 分リング
-  hourRing.mesh.rotation.z = -(hour/12)*Math.PI*2 + t*0.1; // 時リング
-
-  // ゆらゆらスケール変化
-  secRing.mesh.scale.set(scale*1.1 * (1+0.05*Math.sin(t*2)), scale*1.1 * (1+0.05*Math.cos(t*2)), 1);
-  minRing.mesh.scale.set(scale*1.2 * (1+0.07*Math.sin(t*1.5)), scale*1.2 * (1+0.07*Math.cos(t*1.5)), 1);
-  hourRing.mesh.scale.set(scale*1.3 * (1+0.04*Math.sin(t)), scale*1.3 * (1+0.04*Math.cos(t)), 1);
-
-  // 色相変化
-  const hueShift = (elapsedMs/100) % 360;
-  secRing.draw(hueShift);
-  minRing.draw(hueShift*0.5);
-  hourRing.draw(hueShift*0.2);
-
-  // 年ごとにリング追加
-  while (extraRings.length < yearsPassed) {
-    const idx = extraRings.length % palette.length;
-    const radius = 2.5 + extraRings.length*0.3;
-    const ring = createSolidRing(radius, palette[idx]);
-    scene.add(ring);
-    extraRings.push(ring);
-  }
-
-  renderer.render(scene, camera);
-}
-animate();
-
-// === リサイズ対応 ===
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
-});
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  document.body.appendChild(renderer.domElement);
+
+  // 環境マップ（HDRI不要で内部生成）
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  const environment = new RoomEnvironment();
+  const envMap = pmremGenerator.fromScene(environment).texture;
+  scene.environment = envMap;
+
+  // 照明
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(5, 10, 5);
+  scene.add(light);
+
+  // 金属板マテリアル
+  const textureLoader = new THREE.TextureLoader();
+  const normalMap = textureLoader.load("https://threejs.org/examples/textures/waternormals.jpg");
+  normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
+
+  const metalMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x888888,
+    metalness: 1.0,
+    roughness: 0.15,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.1,
+    normalMap: normalMap,
+    normalScale: new THREE.Vector2(0.3, 0.3),
+    envMap: envMap,
+    envMapIntensity: 1.5,
+  });
+
+  // 金属板ジオメトリ
+  const plateGeometry = new THREE.PlaneGeometry(3, 2, 64, 64);
+  const plate = new THREE.Mesh(plateGeometry, metalMaterial);
+  plate.rotation.x = -Math.PI / 2.5;
+  scene.add(plate);
+
+  // CubeCameraでリアル反射
+  const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(512);
+  const cubeCamera = new THREE.CubeCamera(0.1, 100, cubeRenderTarget);
+  metalMaterial.envMap = cubeRenderTarget.texture;
+
+  // カメラ操作
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.1;
+
+  // アニメーション
+  function animate() {
+    requestAnimationFrame(animate);
+
+    // 板の反射をリアルタイム更新
+    plate.visible = false;
+    cubeCamera.update(renderer, scene);
+    plate.visible = true;
+
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // リサイズ対応
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
 </script>
 </body>
 </html>
