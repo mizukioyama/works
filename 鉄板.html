@@ -1,169 +1,104 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>動作する：反射鉄板（CubeCamera）サンプル</title>
+  <title>リアルな鉄板の反射</title>
+  <link rel="icon" href="data:,">
   <style>
-    html,body { height:100%; margin:0; background:#111; }
-    canvas { display:block; width:100%; height:100%; }
-    #info { position:fixed; left:12px; top:12px; z-index:5; color:#ddd;
-           background:rgba(0,0,0,0.35); padding:8px; border-radius:6px; font-family:Arial; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+    }
+    canvas {
+      display: block;
+    }
   </style>
+  <!-- importmapを使ってthreeとaddonsを定義 -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body>
-<div id="info">ドラッグで回転 — リングが反射に映ります</div>
-
 <script type="module">
-  // === Three.js を ESM (CDN) から直接インポート（必ずフルURLを使う） ===
-  import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js";
-  import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/controls/OrbitControls.js";
-  import { RGBELoader } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/loaders/RGBELoader.js";
+  import * as THREE from "three";
+  import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-  // --- 基本セットアップ ---
+  // === シーン作成 ===
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0f0f10);
 
-  const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 200);
-  camera.position.set(0, 1.2, 3.2);
+  // === カメラ設定 ===
+  const camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+  camera.position.set(0, 2, 5);
 
+  // === レンダラー ===
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(innerWidth, innerHeight);
-  // tone mapping & output color space for nicer lighting when env map used
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   document.body.appendChild(renderer.domElement);
 
+  // === 環境マップ（反射用） ===
+  const envMap = new THREE.CubeTextureLoader()
+    .setPath("https://threejs.org/examples/textures/cube/Bridge2/")
+    .load([
+      "posx.jpg", "negx.jpg",
+      "posy.jpg", "negy.jpg",
+      "posz.jpg", "negz.jpg"
+    ]);
+  scene.background = envMap;
+
+  // === ライト ===
+  const light = new THREE.DirectionalLight(0xffffff, 1.2);
+  light.position.set(5, 10, 5);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+  // === 鉄板オブジェクト ===
+  const plateGeometry = new THREE.BoxGeometry(3, 0.1, 3);
+  const plateMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x888888,
+    metalness: 1.0,
+    roughness: 0.1,
+    envMap: envMap,
+    envMapIntensity: 1.5,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.05
+  });
+  const ironPlate = new THREE.Mesh(plateGeometry, plateMaterial);
+  scene.add(ironPlate);
+
+  // === カメラ操作 ===
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
+  controls.dampingFactor = 0.05;
 
-  // --- ライティング ---
-  scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-  const d = new THREE.DirectionalLight(0xffffff, 0.9);
-  d.position.set(5, 6, 2);
-  scene.add(d);
-
-  // --- 反射キャプチャ用 CubeCamera（鏡面に写す用） ---
-  const cubeTarget = new THREE.WebGLCubeRenderTarget(512, {
-    format: THREE.RGBAFormat,
-    generateMipmaps: true,
-    minFilter: THREE.LinearMipmapLinearFilter
-  });
-  const cubeCamera = new THREE.CubeCamera(0.1, 1000, cubeTarget);
-  scene.add(cubeCamera);
-
-  // --- 背景に配置する虹色リング（反射の元） ---
-  function createRainbowRing(inner, outer, seg=256){
-    const geo = new THREE.RingGeometry(inner, outer, seg);
-    const pos = geo.attributes.position;
-    const colors = [];
-    for(let i=0;i<pos.count;i++){
-      const x = pos.getX(i), y = pos.getY(i);
-      const ang = (Math.atan2(y,x) + Math.PI) / (2*Math.PI);
-      const c = new THREE.Color().setHSL(ang, 1.0, 0.6);
-      colors.push(c.r, c.g, c.b);
-    }
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    const mat = new THREE.MeshBasicMaterial({
-      vertexColors: true,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.8,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.rotation.x = Math.PI/2;
-    return mesh;
-  }
-
-  const ringGroup = new THREE.Group();
-  ringGroup.position.set(0, 0, -1.8);
-  for(let i=0;i<4;i++){
-    const r = createRainbowRing(1.8 + i*0.18, 2.0 + i*0.18);
-    r.rotation.z = i * 0.2;
-    ringGroup.add(r);
-  }
-  scene.add(ringGroup);
-
-  // --- 鉄板（Plane で少し湾曲） ---
-  const plateGeo = new THREE.PlaneGeometry(2.6, 1.6, 120, 80);
-  // 軽く頂点にゆがみを与えて自然に
-  for(let i=0;i<plateGeo.attributes.position.count;i++){
-    const x = plateGeo.attributes.position.getX(i);
-    const y = plateGeo.attributes.position.getY(i);
-    const r = Math.sqrt(x*x + y*y);
-    plateGeo.attributes.position.setZ(i, Math.sin(r*2.2) * 0.006 * (Math.random()*0.6 + 0.7));
-  }
-  plateGeo.computeVertexNormals();
-
-  const plateMat = new THREE.MeshPhysicalMaterial({
-    color: 0xbfbfc1,
-    metalness: 1.0,
-    roughness: 0.12,
-    envMap: cubeTarget.texture,
-    envMapIntensity: 1.2,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.02
+  // === ウィンドウリサイズ対応 ===
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  const plate = new THREE.Mesh(plateGeo, plateMat);
-  plate.rotation.x = -Math.PI/2;
-  plate.position.y = 0;
-  scene.add(plate);
-
-  // --- 小さなリベットを追加（見栄え） ---
-  const rivetGeo = new THREE.CylinderGeometry(0.03,0.03,0.06,12);
-  const rivetMat = new THREE.MeshStandardMaterial({ color:0x888888, metalness:1, roughness:0.35 });
-  [[-1.05,0.68], [1.05,0.68], [-1.05,-0.68], [1.05,-0.68]].forEach(p=>{
-    const m = new THREE.Mesh(rivetGeo, rivetMat);
-    m.rotation.x = Math.PI/2;
-    m.position.set(p[0], 0.06, p[1]);
-    scene.add(m);
-  });
-
-  // --- オプション：HDRI を読み込んでシーンライティングを強化（任意） ---
-  // RGBELoader を使いたい場合は下記のように読み込んで environment にセットできます。
-  // ただし .hdr を直接ロードするために CORS を満たす必要があり、CDNや threejs examples のパスを使うのが無難です。
-  // new RGBELoader().setPath('https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/equirectangular/').load('royal_esplanade_1k.hdr', (tex)=>{
-  //   tex.mapping = THREE.EquirectangularReflectionMapping;
-  //   scene.environment = tex;
-  // });
-
-  // --- アニメーションループ（CubeCamera 更新方法に注意） ---
-  function animate(){
+  // === アニメーション ===
+  function animate() {
     requestAnimationFrame(animate);
-
-    // リングをゆっくり回す（反射の変化が分かるように）
-    ringGroup.rotation.z += 0.0025;
-    ringGroup.children.forEach((r,i)=>{
-      r.material.opacity = 0.7 + 0.12 * Math.sin(Date.now()*0.0015 + i);
-    });
-
-    // CubeCamera に写す：鏡面(plate)を一時的に隠して背景だけをキャプチャ
-    plate.visible = false; // 自己反射を避ける（重要）
-    cubeCamera.position.copy(plate.position).add(new THREE.Vector3(0,0.08,0));
-    cubeCamera.update(renderer, scene);
-    plate.visible = true;
-
     controls.update();
     renderer.render(scene, camera);
   }
   animate();
-
-  // --- リサイズ対応 ---
-  window.addEventListener('resize', ()=>{
-    camera.aspect = innerWidth/innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
-  });
-
-  // --- デバッグ用（もし favicon 404 が気になる場合） ---
-  // document.head.insertAdjacentHTML('beforeend','<link rel="icon" href="data:,">');
-
 </script>
 </body>
 </html>
