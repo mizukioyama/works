@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ライフゲーム — 鉄板の上で（Three.js版）</title>
+  <title>ライフゲーム — 鉄板の上で（Three.js ES Module 版）</title>
   <style>
     :root{--bg:#111;--plate:#9aa0a6;--accent:#e76f51}
     html,body{height:100%;margin:0;background:linear-gradient(180deg,#0b0b0f 0%, #131316 100%);font-family:"Meiryo", Arial, sans-serif;color:#fff}
@@ -28,7 +28,7 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>ライフゲーム — 鉄板の上で（Three.jsでリアルな鉄板表現）</h1>
+    <h1>ライフゲーム — 鉄板の上で（ES Module 対応）</h1>
     <div class="plate">
       <div class="top">
         <div class="controls">
@@ -43,13 +43,13 @@
           <button id="resizeBtn">再描画</button>
         </div>
         <div class="info">
-          <div>three.js を使って鉄板質感を表現しています。ライフゲームは上の透明キャンバスで描画され、鉄板の上で細胞が発光して見えます。</div>
+          <div>Three.js の ES Modules を使うように修正しました（r150+ の deprecation に対応）</div>
         </div>
       </div>
 
       <div class="board-wrap">
         <div class="scene-container" id="sceneWrap">
-          <!-- three.js renderer will insert a canvas here -->
+          <!-- three.js renderer (module) will insert a canvas here -->
           <canvas id="lifeCanvas" class="life"></canvas>
         </div>
         <div style="max-width:260px">
@@ -59,15 +59,16 @@
             <li>ドラッグで複数セルを切り替え</li>
             <li>三次元の光と反射は自動で変化します</li>
           </ul>
-          <p class="small">このファイルを <code>index.html</code> にして GitHub Pages に置けば動きます（外部 CDN から three.js を読み込み）。</p>
+          <p class="small">このファイルを <code>index.html</code> にして GitHub Pages に置けば動きます（ブラウザは ES Modules をサポートしている必要があります）。</p>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- three.js CDN -->
-  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-  <script>
+  <!-- Use ES Module import for three.js to avoid r150+ deprecation warnings -->
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
     // --- common DOM ---
     const lifeCanvas = document.getElementById('lifeCanvas');
     const ctx = lifeCanvas.getContext('2d');
@@ -89,14 +90,11 @@
     let running = false;
     let grid = [];
     let rafId = null; let lastTick = 0;
-
     function makeGrid(r,c){ const a = new Array(r); for(let i=0;i<r;i++){ a[i]=new Array(c).fill(0);} return a; }
-
     function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 
     // --- three.js setup ---
-    const THREE = window.THREE;
-    const renderer = new THREE.WebGLRenderer({antialias:true});
+    const renderer = new THREE.WebGLRenderer({antialias:true, alpha:false});
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.domElement.className = 'webgl';
     sceneWrap.insertBefore(renderer.domElement, lifeCanvas);
@@ -113,15 +111,16 @@
     // plane geometry as iron plate
     const planeGeo = new THREE.PlaneGeometry(2.4, 1.6, 256, 256);
 
-    // create procedural normal map / roughness map using canvas
+    // create procedural normal/roughness map using canvas
     function makeNoiseCanvas(w,h){
       const c = document.createElement('canvas'); c.width=w; c.height=h; const cx=c.getContext('2d');
-      const img = cx.createImageData(w,h); for(let i=0;i<img.data.length;i+=4){
+      const img = cx.createImageData(w,h);
+      for(let i=0;i<img.data.length;i+=4){
         const v = 120 + Math.floor((Math.random()-0.5)*60 + Math.sin(i/17)*20);
         img.data[i]=v; img.data[i+1]=v; img.data[i+2]=v; img.data[i+3]=255;
       }
       cx.putImageData(img,0,0);
-      // add subtle scratches
+      // scratches
       cx.globalCompositeOperation = 'lighter';
       cx.strokeStyle = 'rgba(255,255,255,0.06)';
       for(let i=0;i<200;i++){ cx.beginPath(); const y = Math.random()*h; cx.moveTo(0,y); cx.lineTo(w, y + (Math.random()-0.5)*20); cx.stroke(); }
@@ -140,11 +139,11 @@
     });
 
     const plate = new THREE.Mesh(planeGeo, plateMat);
-    plate.rotation.x = -Math.PI/2; // make it horizontal
+    plate.rotation.x = -Math.PI/2; // horizontal
     plate.position.z = -0.02;
     scene.add(plate);
 
-    // add subtle curved edges by displacing vertices slightly
+    // subtle warp
     (function warpPlate(){
       const pos = planeGeo.attributes.position;
       for(let i=0;i<pos.count;i++){
@@ -155,9 +154,9 @@
       pos.needsUpdate = true;
     })();
 
-    // reflective suggestion: fake environment using gradient cube texture (simple)
-    const envCanvas = document.createElement('canvas'); envCanvas.width=256; envCanvas.height=128; const envCtx=envCanvas.getContext('2d');
-    const g = envCtx.createLinearGradient(0,0,256,128); g.addColorStop(0,'#1f2937'); g.addColorStop(0.5,'#7a8896'); g.addColorStop(1,'#0b0b0b'); envCtx.fillStyle=g; envCtx.fillRect(0,0,256,128);
+    // fake environment from a gradient canvas
+    const envCanvas = document.createElement('canvas'); envCanvas.width=512; envCanvas.height=256; const envCtx=envCanvas.getContext('2d');
+    const g = envCtx.createLinearGradient(0,0,512,256); g.addColorStop(0,'#1f2937'); g.addColorStop(0.5,'#7a8896'); g.addColorStop(1,'#0b0b0b'); envCtx.fillStyle=g; envCtx.fillRect(0,0,512,256);
     const envTex = new THREE.CanvasTexture(envCanvas);
     envTex.mapping = THREE.EquirectangularReflectionMapping;
     scene.environment = envTex;
@@ -169,7 +168,6 @@
       cellSize = clamp(parseInt(cellSizeRange.value,10),4,48);
       const w = cols * cellSize;
       const h = rows * cellSize;
-      // limit maximum display size but keep aspect
       const maxW = 680; const scale = Math.min(1, maxW / w);
       const dispW = Math.round(w * scale), dispH = Math.round(h * scale);
 
@@ -177,35 +175,32 @@
       renderer.domElement.style.width = dispW + 'px';
       renderer.domElement.style.height = dispH + 'px';
 
-      lifeCanvas.width = w; lifeCanvas.height = h; // full logical size for crispness
+      lifeCanvas.width = w; lifeCanvas.height = h;
       lifeCanvas.style.width = dispW + 'px'; lifeCanvas.style.height = dispH + 'px';
 
       grid = makeGrid(rows, cols);
       draw();
+
+      // adjust camera to fit
+      camera.aspect = dispW / dispH; camera.updateProjectionMatrix();
     }
 
-    // draw life onto transparent canvas so metal shows through
+    // draw life onto transparent canvas
     function draw(){
       ctx.clearRect(0,0,lifeCanvas.width,lifeCanvas.height);
-      // draw cells
       for(let r=0;r<rows;r++){
         for(let c=0;c<cols;c++){
           if(grid[r][c]){
             const x=c*cellSize, y=r*cellSize;
-            // glow effect: draw radial gradient for alive cells
             const cx = x + cellSize/2, cy = y + cellSize/2, rad = Math.max(4, cellSize*0.6);
             const g = ctx.createRadialGradient(cx,cy,rad*0.1,cx,cy,rad);
             g.addColorStop(0,'rgba(255,230,120,0.95)'); g.addColorStop(0.45,'rgba(255,200,80,0.6)'); g.addColorStop(1,'rgba(0,0,0,0)');
-            ctx.fillStyle = g;
-            ctx.beginPath(); ctx.arc(cx,cy,rad,0,Math.PI*2); ctx.fill();
-            // small bright center
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx,cy,rad,0,Math.PI*2); ctx.fill();
             ctx.fillStyle = 'rgba(255,250,200,0.9)'; ctx.fillRect(x + cellSize*0.33, y + cellSize*0.33, cellSize*0.34, cellSize*0.34);
           }
         }
       }
-      // subtle grid lines
-      ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1;
-      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1; ctx.beginPath();
       for(let r=1;r<rows;r++){ ctx.moveTo(0, r*cellSize); ctx.lineTo(lifeCanvas.width, r*cellSize); }
       for(let c=1;c<cols;c++){ ctx.moveTo(c*cellSize, 0); ctx.lineTo(c*cellSize, lifeCanvas.height); }
       ctx.stroke();
@@ -221,7 +216,6 @@
 
     // animation
     function loop(ts){ if(!lastTick) lastTick = ts; const msPerStep = Math.round(1000 / (parseInt(speedRange.value,10) * 1.2)); if(ts - lastTick >= msPerStep){ if(running) step(); lastTick = ts; }
-      // animate lights / subtle rotation for realism
       const t = ts * 0.0003;
       key.position.x = Math.cos(t*1.2)*2; key.position.y = 1.6 + Math.sin(t*0.7)*0.4;
       fill.position.x = Math.sin(t*0.9)*2; fill.position.y = -1 + Math.cos(t*0.5)*0.6;
@@ -230,7 +224,7 @@
       rafId = requestAnimationFrame(loop);
     }
 
-    // mouse interactions for life canvas (toggle cells)
+    // mouse interactions
     let isDown = false;
     function canvasCoords(e){
       const rect = lifeCanvas.getBoundingClientRect();
@@ -256,27 +250,11 @@
     resizeBtn.addEventListener('click', ()=>{ resizeAll(); });
 
     // initialize
-    function init(){ resizeAll(); // camera fit
-      // position camera to fit the plane to the life canvas aspect
-      const aspect = lifeCanvas.width / lifeCanvas.height; camera.aspect = aspect; camera.updateProjectionMatrix();
-      // center plate scale to cover canvas area
-      const planeWidth = cols * cellSize / Math.max(cols*cellSize, rows*cellSize);
-      // start animation
-      rafId = requestAnimationFrame(loop);
-    }
+    function init(){ resizeAll(); camera.aspect = (lifeCanvas.width / Math.max(1, lifeCanvas.height)); camera.updateProjectionMatrix(); rafId = requestAnimationFrame(loop); }
 
-    // window resize (reflow)
-    window.addEventListener('resize', ()=>{ // recompute display sizing to keep thing responsive
-      const dispW = Math.min(680, cols*cellSize);
-      const scale = dispW / (cols*cellSize);
-      const dispH = Math.round(rows*cellSize * scale);
-      renderer.setSize(dispW, dispH, false);
-      renderer.domElement.style.width = dispW + 'px'; renderer.domElement.style.height = dispH + 'px';
-      lifeCanvas.style.width = dispW + 'px'; lifeCanvas.style.height = dispH + 'px';
-    });
+    window.addEventListener('resize', ()=>{ const dispW = Math.min(680, cols*cellSize); const scale = dispW / (cols*cellSize); const dispH = Math.round(rows*cellSize * scale); renderer.setSize(dispW, dispH, false); renderer.domElement.style.width = dispW + 'px'; renderer.domElement.style.height = dispH + 'px'; lifeCanvas.style.width = dispW + 'px'; lifeCanvas.style.height = dispH + 'px'; });
 
     init();
-
   </script>
 </body>
 </html>
