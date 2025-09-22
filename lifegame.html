@@ -1,260 +1,128 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ライフゲーム — 鉄板の上で（Three.js ES Module 版）</title>
-  <style>
-    :root{--bg:#111;--plate:#9aa0a6;--accent:#e76f51}
-    html,body{height:100%;margin:0;background:linear-gradient(180deg,#0b0b0f 0%, #131316 100%);font-family:"Meiryo", Arial, sans-serif;color:#fff}
-    .wrap{width:960px; max-width:96vw; margin:28px auto;padding:18px;box-sizing:border-box}
-    h1{font-size:20px;margin:0 0 12px;text-align:center}
-    .plate{background:linear-gradient(145deg, rgba(255,255,255,0.02), rgba(0,0,0,0.04)); border-radius:14px;padding:12px; box-shadow:0 8px 30px rgba(0,0,0,0.6);}
-    .top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
-    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    button{background:#333;color:#fff;border:0;padding:8px 10px;border-radius:8px;cursor:pointer}
-    button.primary{background:var(--accent)}
-    input[type=range]{width:140px}
-    label{font-size:13px}
-    .board-wrap{display:flex;gap:14px;align-items:flex-start}
-    .scene-container{position:relative;width:100%;max-width:680px}
-    /* three.js canvas sits behind, life canvas overlays */
-    canvas.webgl{display:block;border-radius:8px;box-shadow: 0 6px 18px rgba(0,0,0,0.6)}
-    canvas.life{position:absolute;left:0;top:0}
-    .info{font-size:13px;color:#f0f0f0;opacity:0.95}
-    .small{font-size:12px;color:#ddd}
-    @media (max-width:720px){.board-wrap{flex-direction:column;align-items:center}}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>リアル鉄板ライフゲーム</title>
+<style>
+  body { margin:0; overflow:hidden; background:#000; }
+  canvas { display:block; }
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>ライフゲーム — 鉄板の上で（ES Module 対応）</h1>
-    <div class="plate">
-      <div class="top">
-        <div class="controls">
-          <button id="startBtn" class="primary">開始</button>
-          <button id="stepBtn">1ステップ</button>
-          <button id="clearBtn">クリア</button>
-          <button id="randomBtn">ランダム</button>
-          <label class="small">速度 <input id="speed" type="range" min="1" max="10" value="5"></label>
-          <label class="small">セルサイズ <input id="cellSize" type="range" min="4" max="24" value="12"></label>
-          <label class="small">行数 <input id="rowsInp" type="number" min="10" max="200" value="40" style="width:70px"></label>
-          <label class="small">列数 <input id="colsInp" type="number" min="10" max="200" value="60" style="width:70px"></label>
-          <button id="resizeBtn">再描画</button>
-        </div>
-        <div class="info">
-          <div>Three.js の ES Modules を使うように修正しました（r150+ の deprecation に対応）</div>
-        </div>
-      </div>
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 
-      <div class="board-wrap">
-        <div class="scene-container" id="sceneWrap">
-          <!-- three.js renderer (module) will insert a canvas here -->
-          <canvas id="lifeCanvas" class="life"></canvas>
-        </div>
-        <div style="max-width:260px">
-          <p class="small">操作:</p>
-          <ul class="small">
-            <li>キャンバスをクリックしてセルをオン/オフ</li>
-            <li>ドラッグで複数セルを切り替え</li>
-            <li>三次元の光と反射は自動で変化します</li>
-          </ul>
-          <p class="small">このファイルを <code>index.html</code> にして GitHub Pages に置けば動きます（ブラウザは ES Modules をサポートしている必要があります）。</p>
-        </div>
-      </div>
-    </div>
-  </div>
+const width = window.innerWidth;
+const height = window.innerHeight;
+const cols = 60;
+const rows = 40;
+let grid = createGrid();
+let next = createGrid();
 
-  <!-- Use ES Module import for three.js to avoid r150+ deprecation warnings -->
-  <script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+function createGrid() {
+  return Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => Math.random() > 0.8 ? 1 : 0)
+  );
+}
 
-    // --- common DOM ---
-    const lifeCanvas = document.getElementById('lifeCanvas');
-    const ctx = lifeCanvas.getContext('2d');
-    const startBtn = document.getElementById('startBtn');
-    const stepBtn = document.getElementById('stepBtn');
-    const clearBtn = document.getElementById('clearBtn');
-    const randomBtn = document.getElementById('randomBtn');
-    const speedRange = document.getElementById('speed');
-    const cellSizeRange = document.getElementById('cellSize');
-    const rowsInp = document.getElementById('rowsInp');
-    const colsInp = document.getElementById('colsInp');
-    const resizeBtn = document.getElementById('resizeBtn');
-    const sceneWrap = document.getElementById('sceneWrap');
+// --- Three.js 初期化 ---
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, width/height, 0.1, 1000);
+camera.position.set(0, 40, 70);
+camera.lookAt(0, 0, 0);
 
-    // life state
-    let rows = parseInt(rowsInp.value,10);
-    let cols = parseInt(colsInp.value,10);
-    let cellSize = parseInt(cellSizeRange.value,10);
-    let running = false;
-    let grid = [];
-    let rafId = null; let lastTick = 0;
-    function makeGrid(r,c){ const a = new Array(r); for(let i=0;i<r;i++){ a[i]=new Array(c).fill(0);} return a; }
-    function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(width, height);
+document.body.appendChild(renderer.domElement);
 
-    // --- three.js setup ---
-    const renderer = new THREE.WebGLRenderer({antialias:true, alpha:false});
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.domElement.className = 'webgl';
-    sceneWrap.insertBefore(renderer.domElement, lifeCanvas);
+// 環境光＋方向光
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(10, 20, 10);
+scene.add(dirLight);
 
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
-    camera.position.set(0, 1.6, 2.4);
+// 「鉄板」マテリアル (粗いメタリック)
+const plateMaterial = new THREE.MeshStandardMaterial({
+  color: 0x999999,
+  metalness: 0.9,
+  roughness: 0.4
+});
 
-    // lights
-    const ambient = new THREE.AmbientLight(0xffffff, 0.35); scene.add(ambient);
-    const key = new THREE.DirectionalLight(0xfff7f0, 0.9); key.position.set(-2,2,1); scene.add(key);
-    const fill = new THREE.PointLight(0xb5c6ff, 0.45, 10); fill.position.set(2,-1,2); scene.add(fill);
+// セル表示用 Mesh の生成
+const cellGroup = new THREE.Group();
+scene.add(cellGroup);
+for (let r = 0; r < rows; r++) {
+  for (let c = 0; c < cols; c++) {
+    const geo = new THREE.BoxGeometry(1, 0.2, 1);
+    const mesh = new THREE.Mesh(geo, plateMaterial.clone());
+    mesh.position.set(
+      c - cols / 2,
+      0,
+      r - rows / 2
+    );
+    mesh.visible = grid[r][c] === 1;
+    cellGroup.add(mesh);
+  }
+}
+const cells = cellGroup.children;
 
-    // plane geometry as iron plate
-    const planeGeo = new THREE.PlaneGeometry(2.4, 1.6, 256, 256);
+// ライフゲーム更新
+function updateLife() {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const neighbors = countNeighbors(grid, r, c);
+      if (grid[r][c] === 1 && (neighbors < 2 || neighbors > 3)) next[r][c] = 0;
+      else if (grid[r][c] === 0 && neighbors === 3) next[r][c] = 1;
+      else next[r][c] = grid[r][c];
+    }
+  }
+  [grid, next] = [next, grid];
+  // 表示更新
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      cells[r * cols + c].visible = grid[r][c] === 1;
+    }
+  }
+}
 
-    // create procedural normal/roughness map using canvas
-    function makeNoiseCanvas(w,h){
-      const c = document.createElement('canvas'); c.width=w; c.height=h; const cx=c.getContext('2d');
-      const img = cx.createImageData(w,h);
-      for(let i=0;i<img.data.length;i+=4){
-        const v = 120 + Math.floor((Math.random()-0.5)*60 + Math.sin(i/17)*20);
-        img.data[i]=v; img.data[i+1]=v; img.data[i+2]=v; img.data[i+3]=255;
+function countNeighbors(arr, x, y) {
+  let sum = 0;
+  for (let i = -1; i <= 1; i++) {
+    for (let j = -1; j <= 1; j++) {
+      if (i === 0 && j === 0) continue;
+      const r = x + i;
+      const c = y + j;
+      if (r >= 0 && r < rows && c >= 0 && c < cols) {
+        sum += arr[r][c];
       }
-      cx.putImageData(img,0,0);
-      // scratches
-      cx.globalCompositeOperation = 'lighter';
-      cx.strokeStyle = 'rgba(255,255,255,0.06)';
-      for(let i=0;i<200;i++){ cx.beginPath(); const y = Math.random()*h; cx.moveTo(0,y); cx.lineTo(w, y + (Math.random()-0.5)*20); cx.stroke(); }
-      return c;
     }
+  }
+  return sum;
+}
 
-    const noiseTex = new THREE.CanvasTexture(makeNoiseCanvas(1024,512)); noiseTex.wrapS = noiseTex.wrapT = THREE.RepeatWrapping; noiseTex.repeat.set(2,2);
+// --- アニメーション ---
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+animate();
 
-    const plateMat = new THREE.MeshStandardMaterial({
-      color: 0x8b8f92,
-      metalness: 1.0,
-      roughness: 0.45,
-      roughnessMap: noiseTex,
-      normalMap: noiseTex,
-      envMapIntensity: 1.0
-    });
+// --- 自動更新（ランダム速度） ---
+function randomUpdate() {
+  updateLife();
+  // 次回までの待ち時間をランダム 100ms〜1000ms
+  const delay = Math.random() * 900 + 100;
+  setTimeout(randomUpdate, delay);
+}
+randomUpdate();
 
-    const plate = new THREE.Mesh(planeGeo, plateMat);
-    plate.rotation.x = -Math.PI/2; // horizontal
-    plate.position.z = -0.02;
-    scene.add(plate);
-
-    // subtle warp
-    (function warpPlate(){
-      const pos = planeGeo.attributes.position;
-      for(let i=0;i<pos.count;i++){
-        const x = pos.getX(i), y = pos.getY(i);
-        const d = Math.sqrt(x*x + y*y);
-        pos.setZ(i, Math.sin(d*6.0)*0.002 - Math.pow(d,3)*0.01);
-      }
-      pos.needsUpdate = true;
-    })();
-
-    // fake environment from a gradient canvas
-    const envCanvas = document.createElement('canvas'); envCanvas.width=512; envCanvas.height=256; const envCtx=envCanvas.getContext('2d');
-    const g = envCtx.createLinearGradient(0,0,512,256); g.addColorStop(0,'#1f2937'); g.addColorStop(0.5,'#7a8896'); g.addColorStop(1,'#0b0b0b'); envCtx.fillStyle=g; envCtx.fillRect(0,0,512,256);
-    const envTex = new THREE.CanvasTexture(envCanvas);
-    envTex.mapping = THREE.EquirectangularReflectionMapping;
-    scene.environment = envTex;
-
-    // resize handler: set both renderer and life canvas to same pixel size based on rows/cols
-    function resizeAll(){
-      rows = clamp(parseInt(rowsInp.value,10),10,200);
-      cols = clamp(parseInt(colsInp.value,10),10,200);
-      cellSize = clamp(parseInt(cellSizeRange.value,10),4,48);
-      const w = cols * cellSize;
-      const h = rows * cellSize;
-      const maxW = 680; const scale = Math.min(1, maxW / w);
-      const dispW = Math.round(w * scale), dispH = Math.round(h * scale);
-
-      renderer.setSize(dispW, dispH, false);
-      renderer.domElement.style.width = dispW + 'px';
-      renderer.domElement.style.height = dispH + 'px';
-
-      lifeCanvas.width = w; lifeCanvas.height = h;
-      lifeCanvas.style.width = dispW + 'px'; lifeCanvas.style.height = dispH + 'px';
-
-      grid = makeGrid(rows, cols);
-      draw();
-
-      // adjust camera to fit
-      camera.aspect = dispW / dispH; camera.updateProjectionMatrix();
-    }
-
-    // draw life onto transparent canvas
-    function draw(){
-      ctx.clearRect(0,0,lifeCanvas.width,lifeCanvas.height);
-      for(let r=0;r<rows;r++){
-        for(let c=0;c<cols;c++){
-          if(grid[r][c]){
-            const x=c*cellSize, y=r*cellSize;
-            const cx = x + cellSize/2, cy = y + cellSize/2, rad = Math.max(4, cellSize*0.6);
-            const g = ctx.createRadialGradient(cx,cy,rad*0.1,cx,cy,rad);
-            g.addColorStop(0,'rgba(255,230,120,0.95)'); g.addColorStop(0.45,'rgba(255,200,80,0.6)'); g.addColorStop(1,'rgba(0,0,0,0)');
-            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx,cy,rad,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle = 'rgba(255,250,200,0.9)'; ctx.fillRect(x + cellSize*0.33, y + cellSize*0.33, cellSize*0.34, cellSize*0.34);
-          }
-        }
-      }
-      ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1; ctx.beginPath();
-      for(let r=1;r<rows;r++){ ctx.moveTo(0, r*cellSize); ctx.lineTo(lifeCanvas.width, r*cellSize); }
-      for(let c=1;c<cols;c++){ ctx.moveTo(c*cellSize, 0); ctx.lineTo(c*cellSize, lifeCanvas.height); }
-      ctx.stroke();
-    }
-
-    function countNeighbors(r,c){
-      let n=0; for(let dr=-1; dr<=1; dr++){ for(let dc=-1; dc<=1; dc++){ if(dr===0 && dc===0) continue; const nr=r+dr, nc=c+dc; if(nr<0||nr>=rows||nc<0||nc>=cols) continue; n+=grid[nr][nc]; } } return n;
-    }
-
-    function step(){ const next = makeGrid(rows, cols); for(let r=0;r<rows;r++){ for(let c=0;c<cols;c++){ const n=countNeighbors(r,c); next[r][c] = grid[r][c] ? (n===2||n===3?1:0) : (n===3?1:0); } } grid=next; draw(); }
-
-    function randomize(){ for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) grid[r][c] = (Math.random() < 0.25) ? 1 : 0; draw(); }
-
-    // animation
-    function loop(ts){ if(!lastTick) lastTick = ts; const msPerStep = Math.round(1000 / (parseInt(speedRange.value,10) * 1.2)); if(ts - lastTick >= msPerStep){ if(running) step(); lastTick = ts; }
-      const t = ts * 0.0003;
-      key.position.x = Math.cos(t*1.2)*2; key.position.y = 1.6 + Math.sin(t*0.7)*0.4;
-      fill.position.x = Math.sin(t*0.9)*2; fill.position.y = -1 + Math.cos(t*0.5)*0.6;
-      plate.rotation.z = Math.sin(t*0.2) * 0.02;
-      renderer.render(scene, camera);
-      rafId = requestAnimationFrame(loop);
-    }
-
-    // mouse interactions
-    let isDown = false;
-    function canvasCoords(e){
-      const rect = lifeCanvas.getBoundingClientRect();
-      const clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
-      const clientY = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
-      const x = (clientX - rect.left) * (lifeCanvas.width / rect.width);
-      const y = (clientY - rect.top) * (lifeCanvas.height / rect.height);
-      return {x,y};
-    }
-    function toggleAt(e){ const p = canvasCoords(e); const c = Math.floor(p.x / cellSize); const r = Math.floor(p.y / cellSize); if(r>=0&&r<rows&&c>=0&&c<cols){ grid[r][c] = grid[r][c] ? 0 : 1; draw(); } }
-    lifeCanvas.addEventListener('mousedown', (e)=>{ isDown=true; toggleAt(e); });
-    lifeCanvas.addEventListener('mousemove', (e)=>{ if(isDown) toggleAt(e); });
-    window.addEventListener('mouseup', ()=>{ isDown=false; });
-    lifeCanvas.addEventListener('touchstart',(e)=>{ e.preventDefault(); isDown=true; toggleAt(e); });
-    lifeCanvas.addEventListener('touchmove',(e)=>{ e.preventDefault(); if(isDown) toggleAt(e); });
-    window.addEventListener('touchend',()=>{ isDown=false; });
-
-    // controls
-    startBtn.addEventListener('click', ()=>{ running = !running; startBtn.textContent = running ? '停止' : '開始'; if(running){ lastTick = 0; } });
-    stepBtn.addEventListener('click', ()=>{ if(!running) step(); });
-    clearBtn.addEventListener('click', ()=>{ grid = makeGrid(rows,cols); draw(); });
-    randomBtn.addEventListener('click', ()=>{ randomize(); });
-    resizeBtn.addEventListener('click', ()=>{ resizeAll(); });
-
-    // initialize
-    function init(){ resizeAll(); camera.aspect = (lifeCanvas.width / Math.max(1, lifeCanvas.height)); camera.updateProjectionMatrix(); rafId = requestAnimationFrame(loop); }
-
-    window.addEventListener('resize', ()=>{ const dispW = Math.min(680, cols*cellSize); const scale = dispW / (cols*cellSize); const dispH = Math.round(rows*cellSize * scale); renderer.setSize(dispW, dispH, false); renderer.domElement.style.width = dispW + 'px'; renderer.domElement.style.height = dispH + 'px'; lifeCanvas.style.width = dispW + 'px'; lifeCanvas.style.height = dispH + 'px'; });
-
-    init();
-  </script>
+// リサイズ対応
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
 </body>
 </html>
