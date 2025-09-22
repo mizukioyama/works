@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ライフゲーム — 鉄板の上で（Three.js版）</title>
+  <style>
+    :root{--bg:#111;--plate:#9aa0a6;--accent:#e76f51}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#0b0b0f 0%, #131316 100%);font-family:"Meiryo", Arial, sans-serif;color:#fff}
+    .wrap{width:960px; max-width:96vw; margin:28px auto;padding:18px;box-sizing:border-box}
+    h1{font-size:20px;margin:0 0 12px;text-align:center}
+    .plate{background:linear-gradient(145deg, rgba(255,255,255,0.02), rgba(0,0,0,0.04)); border-radius:14px;padding:12px; box-shadow:0 8px 30px rgba(0,0,0,0.6);}
+    .top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
+    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    button{background:#333;color:#fff;border:0;padding:8px 10px;border-radius:8px;cursor:pointer}
+    button.primary{background:var(--accent)}
+    input[type=range]{width:140px}
+    label{font-size:13px}
+    .board-wrap{display:flex;gap:14px;align-items:flex-start}
+    .scene-container{position:relative;width:100%;max-width:680px}
+    /* three.js canvas sits behind, life canvas overlays */
+    canvas.webgl{display:block;border-radius:8px;box-shadow: 0 6px 18px rgba(0,0,0,0.6)}
+    canvas.life{position:absolute;left:0;top:0}
+    .info{font-size:13px;color:#f0f0f0;opacity:0.95}
+    .small{font-size:12px;color:#ddd}
+    @media (max-width:720px){.board-wrap{flex-direction:column;align-items:center}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>ライフゲーム — 鉄板の上で（Three.jsでリアルな鉄板表現）</h1>
+    <div class="plate">
+      <div class="top">
+        <div class="controls">
+          <button id="startBtn" class="primary">開始</button>
+          <button id="stepBtn">1ステップ</button>
+          <button id="clearBtn">クリア</button>
+          <button id="randomBtn">ランダム</button>
+          <label class="small">速度 <input id="speed" type="range" min="1" max="10" value="5"></label>
+          <label class="small">セルサイズ <input id="cellSize" type="range" min="4" max="24" value="12"></label>
+          <label class="small">行数 <input id="rowsInp" type="number" min="10" max="200" value="40" style="width:70px"></label>
+          <label class="small">列数 <input id="colsInp" type="number" min="10" max="200" value="60" style="width:70px"></label>
+          <button id="resizeBtn">再描画</button>
+        </div>
+        <div class="info">
+          <div>three.js を使って鉄板質感を表現しています。ライフゲームは上の透明キャンバスで描画され、鉄板の上で細胞が発光して見えます。</div>
+        </div>
+      </div>
+
+      <div class="board-wrap">
+        <div class="scene-container" id="sceneWrap">
+          <!-- three.js renderer will insert a canvas here -->
+          <canvas id="lifeCanvas" class="life"></canvas>
+        </div>
+        <div style="max-width:260px">
+          <p class="small">操作:</p>
+          <ul class="small">
+            <li>キャンバスをクリックしてセルをオン/オフ</li>
+            <li>ドラッグで複数セルを切り替え</li>
+            <li>三次元の光と反射は自動で変化します</li>
+          </ul>
+          <p class="small">このファイルを <code>index.html</code> にして GitHub Pages に置けば動きます（外部 CDN から three.js を読み込み）。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- three.js CDN -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script>
+    // --- common DOM ---
+    const lifeCanvas = document.getElementById('lifeCanvas');
+    const ctx = lifeCanvas.getContext('2d');
+    const startBtn = document.getElementById('startBtn');
+    const stepBtn = document.getElementById('stepBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const randomBtn = document.getElementById('randomBtn');
+    const speedRange = document.getElementById('speed');
+    const cellSizeRange = document.getElementById('cellSize');
+    const rowsInp = document.getElementById('rowsInp');
+    const colsInp = document.getElementById('colsInp');
+    const resizeBtn = document.getElementById('resizeBtn');
+    const sceneWrap = document.getElementById('sceneWrap');
+
+    // life state
+    let rows = parseInt(rowsInp.value,10);
+    let cols = parseInt(colsInp.value,10);
+    let cellSize = parseInt(cellSizeRange.value,10);
+    let running = false;
+    let grid = [];
+    let rafId = null; let lastTick = 0;
+
+    function makeGrid(r,c){ const a = new Array(r); for(let i=0;i<r;i++){ a[i]=new Array(c).fill(0);} return a; }
+
+    function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+
+    // --- three.js setup ---
+    const THREE = window.THREE;
+    const renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.domElement.className = 'webgl';
+    sceneWrap.insertBefore(renderer.domElement, lifeCanvas);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+    camera.position.set(0, 1.6, 2.4);
+
+    // lights
+    const ambient = new THREE.AmbientLight(0xffffff, 0.35); scene.add(ambient);
+    const key = new THREE.DirectionalLight(0xfff7f0, 0.9); key.position.set(-2,2,1); scene.add(key);
+    const fill = new THREE.PointLight(0xb5c6ff, 0.45, 10); fill.position.set(2,-1,2); scene.add(fill);
+
+    // plane geometry as iron plate
+    const planeGeo = new THREE.PlaneGeometry(2.4, 1.6, 256, 256);
+
+    // create procedural normal map / roughness map using canvas
+    function makeNoiseCanvas(w,h){
+      const c = document.createElement('canvas'); c.width=w; c.height=h; const cx=c.getContext('2d');
+      const img = cx.createImageData(w,h); for(let i=0;i<img.data.length;i+=4){
+        const v = 120 + Math.floor((Math.random()-0.5)*60 + Math.sin(i/17)*20);
+        img.data[i]=v; img.data[i+1]=v; img.data[i+2]=v; img.data[i+3]=255;
+      }
+      cx.putImageData(img,0,0);
+      // add subtle scratches
+      cx.globalCompositeOperation = 'lighter';
+      cx.strokeStyle = 'rgba(255,255,255,0.06)';
+      for(let i=0;i<200;i++){ cx.beginPath(); const y = Math.random()*h; cx.moveTo(0,y); cx.lineTo(w, y + (Math.random()-0.5)*20); cx.stroke(); }
+      return c;
+    }
+
+    const noiseTex = new THREE.CanvasTexture(makeNoiseCanvas(1024,512)); noiseTex.wrapS = noiseTex.wrapT = THREE.RepeatWrapping; noiseTex.repeat.set(2,2);
+
+    const plateMat = new THREE.MeshStandardMaterial({
+      color: 0x8b8f92,
+      metalness: 1.0,
+      roughness: 0.45,
+      roughnessMap: noiseTex,
+      normalMap: noiseTex,
+      envMapIntensity: 1.0
+    });
+
+    const plate = new THREE.Mesh(planeGeo, plateMat);
+    plate.rotation.x = -Math.PI/2; // make it horizontal
+    plate.position.z = -0.02;
+    scene.add(plate);
+
+    // add subtle curved edges by displacing vertices slightly
+    (function warpPlate(){
+      const pos = planeGeo.attributes.position;
+      for(let i=0;i<pos.count;i++){
+        const x = pos.getX(i), y = pos.getY(i);
+        const d = Math.sqrt(x*x + y*y);
+        pos.setZ(i, Math.sin(d*6.0)*0.002 - Math.pow(d,3)*0.01);
+      }
+      pos.needsUpdate = true;
+    })();
+
+    // reflective suggestion: fake environment using gradient cube texture (simple)
+    const envCanvas = document.createElement('canvas'); envCanvas.width=256; envCanvas.height=128; const envCtx=envCanvas.getContext('2d');
+    const g = envCtx.createLinearGradient(0,0,256,128); g.addColorStop(0,'#1f2937'); g.addColorStop(0.5,'#7a8896'); g.addColorStop(1,'#0b0b0b'); envCtx.fillStyle=g; envCtx.fillRect(0,0,256,128);
+    const envTex = new THREE.CanvasTexture(envCanvas);
+    envTex.mapping = THREE.EquirectangularReflectionMapping;
+    scene.environment = envTex;
+
+    // resize handler: set both renderer and life canvas to same pixel size based on rows/cols
+    function resizeAll(){
+      rows = clamp(parseInt(rowsInp.value,10),10,200);
+      cols = clamp(parseInt(colsInp.value,10),10,200);
+      cellSize = clamp(parseInt(cellSizeRange.value,10),4,48);
+      const w = cols * cellSize;
+      const h = rows * cellSize;
+      // limit maximum display size but keep aspect
+      const maxW = 680; const scale = Math.min(1, maxW / w);
+      const dispW = Math.round(w * scale), dispH = Math.round(h * scale);
+
+      renderer.setSize(dispW, dispH, false);
+      renderer.domElement.style.width = dispW + 'px';
+      renderer.domElement.style.height = dispH + 'px';
+
+      lifeCanvas.width = w; lifeCanvas.height = h; // full logical size for crispness
+      lifeCanvas.style.width = dispW + 'px'; lifeCanvas.style.height = dispH + 'px';
+
+      grid = makeGrid(rows, cols);
+      draw();
+    }
+
+    // draw life onto transparent canvas so metal shows through
+    function draw(){
+      ctx.clearRect(0,0,lifeCanvas.width,lifeCanvas.height);
+      // draw cells
+      for(let r=0;r<rows;r++){
+        for(let c=0;c<cols;c++){
+          if(grid[r][c]){
+            const x=c*cellSize, y=r*cellSize;
+            // glow effect: draw radial gradient for alive cells
+            const cx = x + cellSize/2, cy = y + cellSize/2, rad = Math.max(4, cellSize*0.6);
+            const g = ctx.createRadialGradient(cx,cy,rad*0.1,cx,cy,rad);
+            g.addColorStop(0,'rgba(255,230,120,0.95)'); g.addColorStop(0.45,'rgba(255,200,80,0.6)'); g.addColorStop(1,'rgba(0,0,0,0)');
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.arc(cx,cy,rad,0,Math.PI*2); ctx.fill();
+            // small bright center
+            ctx.fillStyle = 'rgba(255,250,200,0.9)'; ctx.fillRect(x + cellSize*0.33, y + cellSize*0.33, cellSize*0.34, cellSize*0.34);
+          }
+        }
+      }
+      // subtle grid lines
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      for(let r=1;r<rows;r++){ ctx.moveTo(0, r*cellSize); ctx.lineTo(lifeCanvas.width, r*cellSize); }
+      for(let c=1;c<cols;c++){ ctx.moveTo(c*cellSize, 0); ctx.lineTo(c*cellSize, lifeCanvas.height); }
+      ctx.stroke();
+    }
+
+    function countNeighbors(r,c){
+      let n=0; for(let dr=-1; dr<=1; dr++){ for(let dc=-1; dc<=1; dc++){ if(dr===0 && dc===0) continue; const nr=r+dr, nc=c+dc; if(nr<0||nr>=rows||nc<0||nc>=cols) continue; n+=grid[nr][nc]; } } return n;
+    }
+
+    function step(){ const next = makeGrid(rows, cols); for(let r=0;r<rows;r++){ for(let c=0;c<cols;c++){ const n=countNeighbors(r,c); next[r][c] = grid[r][c] ? (n===2||n===3?1:0) : (n===3?1:0); } } grid=next; draw(); }
+
+    function randomize(){ for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) grid[r][c] = (Math.random() < 0.25) ? 1 : 0; draw(); }
+
+    // animation
+    function loop(ts){ if(!lastTick) lastTick = ts; const msPerStep = Math.round(1000 / (parseInt(speedRange.value,10) * 1.2)); if(ts - lastTick >= msPerStep){ if(running) step(); lastTick = ts; }
+      // animate lights / subtle rotation for realism
+      const t = ts * 0.0003;
+      key.position.x = Math.cos(t*1.2)*2; key.position.y = 1.6 + Math.sin(t*0.7)*0.4;
+      fill.position.x = Math.sin(t*0.9)*2; fill.position.y = -1 + Math.cos(t*0.5)*0.6;
+      plate.rotation.z = Math.sin(t*0.2) * 0.02;
+      renderer.render(scene, camera);
+      rafId = requestAnimationFrame(loop);
+    }
+
+    // mouse interactions for life canvas (toggle cells)
+    let isDown = false;
+    function canvasCoords(e){
+      const rect = lifeCanvas.getBoundingClientRect();
+      const clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+      const clientY = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
+      const x = (clientX - rect.left) * (lifeCanvas.width / rect.width);
+      const y = (clientY - rect.top) * (lifeCanvas.height / rect.height);
+      return {x,y};
+    }
+    function toggleAt(e){ const p = canvasCoords(e); const c = Math.floor(p.x / cellSize); const r = Math.floor(p.y / cellSize); if(r>=0&&r<rows&&c>=0&&c<cols){ grid[r][c] = grid[r][c] ? 0 : 1; draw(); } }
+    lifeCanvas.addEventListener('mousedown', (e)=>{ isDown=true; toggleAt(e); });
+    lifeCanvas.addEventListener('mousemove', (e)=>{ if(isDown) toggleAt(e); });
+    window.addEventListener('mouseup', ()=>{ isDown=false; });
+    lifeCanvas.addEventListener('touchstart',(e)=>{ e.preventDefault(); isDown=true; toggleAt(e); });
+    lifeCanvas.addEventListener('touchmove',(e)=>{ e.preventDefault(); if(isDown) toggleAt(e); });
+    window.addEventListener('touchend',()=>{ isDown=false; });
+
+    // controls
+    startBtn.addEventListener('click', ()=>{ running = !running; startBtn.textContent = running ? '停止' : '開始'; if(running){ lastTick = 0; } });
+    stepBtn.addEventListener('click', ()=>{ if(!running) step(); });
+    clearBtn.addEventListener('click', ()=>{ grid = makeGrid(rows,cols); draw(); });
+    randomBtn.addEventListener('click', ()=>{ randomize(); });
+    resizeBtn.addEventListener('click', ()=>{ resizeAll(); });
+
+    // initialize
+    function init(){ resizeAll(); // camera fit
+      // position camera to fit the plane to the life canvas aspect
+      const aspect = lifeCanvas.width / lifeCanvas.height; camera.aspect = aspect; camera.updateProjectionMatrix();
+      // center plate scale to cover canvas area
+      const planeWidth = cols * cellSize / Math.max(cols*cellSize, rows*cellSize);
+      // start animation
+      rafId = requestAnimationFrame(loop);
+    }
+
+    // window resize (reflow)
+    window.addEventListener('resize', ()=>{ // recompute display sizing to keep thing responsive
+      const dispW = Math.min(680, cols*cellSize);
+      const scale = dispW / (cols*cellSize);
+      const dispH = Math.round(rows*cellSize * scale);
+      renderer.setSize(dispW, dispH, false);
+      renderer.domElement.style.width = dispW + 'px'; renderer.domElement.style.height = dispH + 'px';
+      lifeCanvas.style.width = dispW + 'px'; lifeCanvas.style.height = dispH + 'px';
+    });
+
+    init();
+
+  </script>
+</body>
+</html>
