@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>複雑変形・光るパーティクル</title>
+  <title>増減する混ざり合うパーティクル</title>
   <style>
     body { margin: 0; background: #000; overflow: hidden; }
     canvas { display: block; }
@@ -22,22 +22,27 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// === パーティクル設定 ===
-const particleCount = 2000;
+// === 初期設定 ===
+let particleCount = 1000;
 const geometry = new THREE.BufferGeometry();
-const positions = new Float32Array(particleCount * 3);
+let positions = new Float32Array(particleCount * 3);
+let velocities = new Float32Array(particleCount * 3);
 const sizes = new Float32Array(particleCount);
 
-for (let i = 0; i < particleCount; i++) {
+function randomPoint(i) {
   const r = Math.random() * 80 + 40;
   const theta = Math.random() * 2 * Math.PI;
   const phi = Math.acos(2 * Math.random() - 1);
-  positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-  positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-  positions[i * 3 + 2] = r * Math.cos(phi);
-  // サイズを小〜中でランダム
+  positions[i*3]     = r * Math.sin(phi) * Math.cos(theta);
+  positions[i*3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+  positions[i*3 + 2] = r * Math.cos(phi);
+  velocities[i*3] = (Math.random() - 0.5) * 0.5;
+  velocities[i*3 + 1] = (Math.random() - 0.5) * 0.5;
+  velocities[i*3 + 2] = (Math.random() - 0.5) * 0.5;
   sizes[i] = Math.random() * 3 + 0.5;
 }
+
+for (let i = 0; i < particleCount; i++) randomPoint(i);
 
 geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
@@ -54,51 +59,114 @@ const material = new THREE.PointsMaterial({
 const particles = new THREE.Points(geometry, material);
 scene.add(particles);
 
-// === 変形 & インタラクション ===
 let time = 0;
+let targetCount = particleCount;
 let interactionStrength = 0;
 
+// === フレーム処理 ===
 function animate() {
   requestAnimationFrame(animate);
   time += 0.01;
 
+  // 点の増減（500〜2000の範囲で往復）
+  const desired = 500 + Math.floor((Math.sin(time * 0.1) * 0.5 + 0.5) * 1500);
+  if (desired !== targetCount) {
+    targetCount = desired;
+    adjustParticleCount(targetCount);
+  }
+
+  // 点の位置更新
   const pos = geometry.attributes.position.array;
   for (let i = 0; i < particleCount; i++) {
     const idx = i * 3;
 
-    // 元の位置にノイズ的変形を付与
-    const baseX = pos[idx];
-    const baseY = pos[idx + 1];
-    const baseZ = pos[idx + 2];
-
-    const noise1 = Math.sin(time * 0.7 + i * 0.1) * 10;
-    const noise2 = Math.cos(time * 0.3 + i * 0.05) * 15;
-    const radial = Math.sin(time * 0.4 + i) * 20;
-
-    // クリック時の一時的な爆発的変形
-    const interaction = interactionStrength * (Math.random() - 0.5) * 40;
-
-    pos[idx]     = baseX * Math.sin(time * 0.05 + i * 0.002) + noise1 + radial + interaction;
-    pos[idx + 1] = baseY * Math.cos(time * 0.05 + i * 0.002) + noise2 + interaction;
-    pos[idx + 2] = baseZ * Math.sin(time * 0.02 + i * 0.002) + noise1 + interaction;
+    // ノイズ的な変化
+    pos[idx]     += Math.sin(time * 0.6 + i * 0.1) * 0.3 + velocities[idx];
+    pos[idx + 1] += Math.cos(time * 0.5 + i * 0.1) * 0.3 + velocities[idx + 1];
+    pos[idx + 2] += Math.sin(time * 0.4 + i * 0.1) * 0.3 + velocities[idx + 2];
   }
+
+  // 近い粒子同士を引き寄せ
+  mergeClosePoints(pos);
 
   geometry.attributes.position.needsUpdate = true;
 
-  // interactionStrength を徐々に減衰
-  interactionStrength *= 0.92;
-
+  particles.rotation.y += 0.0008;
   particles.rotation.x += 0.0005;
-  particles.rotation.y += 0.001;
+  interactionStrength *= 0.92;
 
   renderer.render(scene, camera);
 }
 
-// === クリック・タッチイベント ===
-function triggerInteraction() {
-  interactionStrength = 1.0; // 強く歪ませる
+// === 粒子数を動的調整 ===
+function adjustParticleCount(count) {
+  const oldCount = particleCount;
+  particleCount = count;
+
+  const newPositions = new Float32Array(particleCount * 3);
+  const newVelocities = new Float32Array(particleCount * 3);
+  const newSizes = new Float32Array(particleCount);
+
+  const minCount = Math.min(oldCount, particleCount);
+  newPositions.set(positions.subarray(0, minCount * 3));
+  newVelocities.set(velocities.subarray(0, minCount * 3));
+  newSizes.set(sizes.subarray(0, minCount));
+
+  // 追加分はランダム生成
+  for (let i = minCount; i < particleCount; i++) {
+    const r = Math.random() * 80 + 40;
+    const theta = Math.random() * 2 * Math.PI;
+    const phi = Math.acos(2 * Math.random() - 1);
+    newPositions[i*3]     = r * Math.sin(phi) * Math.cos(theta);
+    newPositions[i*3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    newPositions[i*3 + 2] = r * Math.cos(phi);
+    newVelocities[i*3] = (Math.random() - 0.5) * 0.5;
+    newVelocities[i*3 + 1] = (Math.random() - 0.5) * 0.5;
+    newVelocities[i*3 + 2] = (Math.random() - 0.5) * 0.5;
+    newSizes[i] = Math.random() * 3 + 0.5;
+  }
+
+  positions = newPositions;
+  velocities = newVelocities;
+
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('size', new THREE.BufferAttribute(newSizes, 1));
 }
 
+// === 近い粒子同士を引き寄せる処理 ===
+function mergeClosePoints(pos) {
+  const threshold = 15; // 距離しきい値
+  const pull = 0.002;
+
+  // 粗い計算でOK
+  for (let i = 0; i < particleCount; i++) {
+    const i3 = i * 3;
+    for (let j = i + 1; j < particleCount; j++) {
+      const j3 = j * 3;
+      const dx = pos[j3] - pos[i3];
+      const dy = pos[j3 + 1] - pos[i3 + 1];
+      const dz = pos[j3 + 2] - pos[i3 + 2];
+      const distSq = dx*dx + dy*dy + dz*dz;
+      if (distSq < threshold * threshold) {
+        const force = pull / Math.sqrt(distSq + 0.1);
+        pos[i3]     += dx * force;
+        pos[i3 + 1] += dy * force;
+        pos[i3 + 2] += dz * force;
+        pos[j3]     -= dx * force;
+        pos[j3 + 1] -= dy * force;
+        pos[j3 + 2] -= dz * force;
+      }
+    }
+  }
+}
+
+// === クリック・タッチで全体を揺らす ===
+function triggerInteraction() {
+  interactionStrength = 1.0;
+  for (let i = 0; i < velocities.length; i++) {
+    velocities[i] += (Math.random() - 0.5) * 2;
+  }
+}
 window.addEventListener('click', triggerInteraction);
 window.addEventListener('touchstart', triggerInteraction);
 
