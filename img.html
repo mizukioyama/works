@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gallery | Smoke Background</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: #000; /* 背景色を暗くして煙が映えるように */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* VANTA背景の範囲を制限（最大幅50%） */
+    #vanta-bg {
+      width: 50%;
+      aspect-ratio: 16 / 9; /* 比率を維持 */
+      border-radius: 20px;
+      overflow: hidden;
+    }
+.gallery {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+</style>
+
+</head>
+<body>
+<div id="vanta-bg"></div>
+<div class="gallery">
+    <img src="https://mizukioyama.github.io/website/img/202343-2.jpg" alt="" style="opacity: 0.5;">
+  <!-- あなたの画像群 -->
+</div>
+
+  <!-- VANTA.js と THREE.js 読み込み -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vanta/dist/vanta.fog.min.js"></script>
+
+  <script>
+    let vantaEffect = VANTA.FOG({
+      el: "#vanta-bg",
+      mouseControls: false,
+      touchControls: false,
+      gyroControls: false,
+      minHeight: 200.00,
+      minWidth: 200.00,
+      highlightColor: 0x181818,
+      midtoneColor: 0xb3b3b3,
+      lowlightColor: 0x0033ff,
+      baseColor: 0xfafffc,
+      blurFactor: 0.60,
+      speed: 0.45, // 基本の速度
+      zoom: 0.40,
+    });
+
+    // ====== 流れる方向のアニメーション制御 ======
+    let directionX = 1; // 右:+1 / 左:-1
+    let elapsed = 0;
+    const interval = 100;     // 0.1秒ごと
+    const switchRight = 25000; // 25秒後に左へ
+    const switchLeft = 38000;  // 38秒後に右へ戻す
+
+    setInterval(() => {
+      elapsed += interval;
+
+      // 左右の切り替え
+      if (elapsed >= switchRight && elapsed < switchLeft) {
+        directionX = -1;
+      } else if (elapsed >= switchLeft) {
+        directionX = 1;
+        elapsed = 0;
+      }
+
+      if (vantaEffect && vantaEffect.options) {
+        const baseSpeed = 0.45;
+        const baseZoom = 0.40;
+
+        // speed を方向によって微調整
+        vantaEffect.options.speed = baseSpeed + (directionX * 0.05);
+
+        // zoom にわずかな揺れを加えて“呼吸感”を出す
+        vantaEffect.options.zoom = baseZoom + (Math.sin(performance.now() * 0.0005) * 0.02);
+      }
+    }, interval);
+
+    // ====== リサイズ対応 ======
+    window.addEventListener('resize', () => {
+      if (vantaEffect) vantaEffect.resize();
+    });
+  </script>
+</body>
+</html>
